@@ -186,6 +186,8 @@ def log_regress_session(f_behavior,f_ephys,epoch_durations=[1,0.4,1,1],smooth_me
 		##also create a group in the datafile
 		if save:
 			f_out.create_group(epoch)
+			##save the raw data here 
+			f_out[epoch].create_dataset("X",data=Xe)
 		##now predict different conditions for this epoch
 		for n, condition in enumerate(condition_list):
 			y = Y[n,:]
@@ -195,6 +197,7 @@ def log_regress_session(f_behavior,f_ephys,epoch_durations=[1,0.4,1,1],smooth_me
 			##save in the file
 			if save:
 				f_out[epoch].create_dataset(condition,data=sig_idx)
+				f_out[epoch].create_dataset("y",data=y)
 	if save:
 		f_out.close()
 	return results
