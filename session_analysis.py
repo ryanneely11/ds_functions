@@ -157,7 +157,7 @@ def log_regress_session(f_behavior,f_ephys,epoch_durations=[1,0.4,1,1],smooth_me
 	else:
 		bin_size = 1 ##'gauss' and 'none' options use a bin width of 1 ms
 	epoch_list = ['choice','action','delay','outcome'] ##the different trial epochs
-	condition_list = ['choice','bock_type','reward'] ##the different conditions to predict
+	condition_list = ['choice','block_type','reward'] ##the different conditions to predict
 	results = {} ##the return dictionary
 	##create the file to save if requested
 	if save:
@@ -194,10 +194,14 @@ def log_regress_session(f_behavior,f_ephys,epoch_durations=[1,0.4,1,1],smooth_me
 			sig_idx = lr.regress_array(Xe,y)
 			##save this data in the results dictionary
 			results[epoch][condition] = sig_idx
+			##also get the strength of a the unit's prediction for this epoch and cond
+			pred_strength = lr.matrix_pred_strength(Xe,y)
 			##save in the file
 			if save:
-				f_out[epoch].create_dataset(condition,data=sig_idx)
-				f_out[epoch].create_dataset("y",data=y)
+				group = f_out[epoch].create_group(condition)
+				group.create_dataset("sig_idx",data=sig_idx)
+				group.create_dataset("y",data=y)
+				group.create_dataset("pred_strength",data=pred_strength)
 	if save:
 		f_out.close()
 	return results

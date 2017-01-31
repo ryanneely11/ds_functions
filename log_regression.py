@@ -31,7 +31,7 @@ def run_cv(X,y):
 	scorer = make_scorer(cohen_kappa_score)
 	##make a cross validation object to use for x-validation
 	kf = KFold(n_splits=3,shuffle=True)
-	score = cross_val_score(lr,X,y,n_jobs=-1,cv=kf,scoring=scorer) ##3-fold x-validation using f1 score
+	score = cross_val_score(lr,X,y,n_jobs=1,cv=kf,scoring=scorer) ##3-fold x-validation using kappa score
 	return score.mean()
 
 
@@ -107,7 +107,23 @@ def regress_array(X,y):
 	sig_idx = np.where(sig_results<=0.05)
 	return sig_idx[0]
 
-	
+"""
+A function that determines the strength of the prediction of units in an array using 
+a functional metric.
+Inputs:	
+	X: array of unit data over some epoch, dimensions trials x units x bins/time
+	y: binary array (1's and zeros) of behavioral outcomes to use in supervised learning
+		plot: if True, plots the data for each condition for all units
+Returns: 
+	-xvals: strength of fit for each unit, computed using three-fold cross validation
+"""
+def matrix_pred_strength(X,y):
+	xvals = np.zeros((X.shape[1]))
+	for u in range(X.shape[1]): ##compute the value for each unit separately
+		x = X[:,u,:]
+		xvals[u] = run_cv(x,y)
+	return xvals
+
 
 """
 A helper function to make a non-binary array
