@@ -72,8 +72,20 @@ def ts_to_bins(ts,bin_size):
 	ts_bins = np.ceil(ts_bins/bin_size).astype(int)
 	##make sure all the windows are the same size
 	win_lens = ts_bins[:,1]-ts_bins[:,0]
-	for i in range(win_lens.shape[0]):
-		assert win_lens[0] == win_lens[i]
+	mean_len = np.round(win_lens.mean()).astype(int) ##this should be the window length in bins
+	##if one of the windows is a different length, add or subtract a bin to make it equal
+	while i < win_lens.shape[0]:
+		win_lens = ts_bins[:,1]-ts_bins[:,0]
+		if win_lens[i] != mean_len:
+			diff = mean_len-win_lens[i]
+			if diff > 0: ##case where the window is too short
+				ts_bins[i,1]+diff
+				print "Equalizing window by "+str(diff)+" bins"
+			if diff < 0: ##case where the window is too long
+				ts_bins[i,1] - diff
+				print "Equalizing window by "+str(diff)+" bins"
+		else:
+			i+=1
 	return ts_bins
 
 ##get the time between the action and the outcome (checking the nosepoke) 
