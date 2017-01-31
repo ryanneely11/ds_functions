@@ -10,6 +10,7 @@ import file_lists
 import log_regression as lr
 import os
 import h5py
+from functools import reduce
 
 """
 a function to run regression analyses over 
@@ -205,3 +206,54 @@ def log_regress_session(f_behavior,f_ephys,epoch_durations=[1,0.4,1,1],smooth_me
 	if save:
 		f_out.close()
 	return results
+
+
+"""
+A function to parse log regression results. For now, it will do two things:
+1) determine the proportion of units distinguishing between each of the three
+	behavioral parameters (choice, block type, and reward), pooling all behavioral epochs
+2) determine the number of units that have overlapping representations, again pooling all epochs
+Inputs:
+	f_in: file name of log regression data file
+REturns:
+	results: dictionary of results
+"""
+def parse_log_regression(f_in):
+	##open the data file
+	f = h5py.File(f_in,'r')
+	##let's start by pooling data from all epochs
+	epochs = f.keys()
+	conditions = [x for x in f[epochs[0]].keys() if x != 'X'] ##the data matrix is also stored here
+	##let's make a dictionary of indices for each condition, pooling across epochs
+	##for the hell of it we'll also keep info about the prediction strengths
+	cond_idx = {}
+	cond_kappas = {}
+	##keep track all the unique significant units
+	all_sig = []
+	for c in conditions:
+		cond_idx[c] = []
+		cond_kappas[c] = []
+	for e in epochs:
+		for c in conditions:
+			sig_idx = np.asarray(f[e][c]['sig_idx'])
+			ps = np.asarray(f[e][c]['pred_strength'])[sig_idx] ##make sure to only take the sig values!
+			##add this data to the dictionary
+			for p in ps:
+				cond_kappas[c].append(p)
+			for i in sig_idx:
+				if i not in cond_idx[c]: ##don't add if it's already listed
+					cond_idx[c].append(i)
+				if i not in all_sig:
+					all_sig.append(i)
+	##now convert the lists to arrays
+	for c in conditions:
+		cond_idx[c] = np.asarray(cond_idx[c])
+		cond_kappas[c] = np.asarray(cond_kappas[c])
+	##now let's determine which units represent more than one task variable
+	#********NOTE: this last step assumes 3 conditions, will need to be changed if there are more or less!!!****
+	assert len(conditions) == 3
+	multi_units = reduce(np.intersect1d,(cond_idx[conditions[0]],cond_idx[conditions[1]],
+		cond_idx[conditions[2]]))
+	return cond_idx,cond_kappas,multi_units,np.asarray(all_sig)
+
+

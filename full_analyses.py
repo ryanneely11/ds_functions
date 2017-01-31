@@ -7,6 +7,7 @@ import file_lists
 import os
 import h5py
 import PCA
+import glob
 
 """
 A function to run and compile regression data for ALL sessions
@@ -135,6 +136,44 @@ def full_log_regression(epoch_durations=[1,0.5,1,1],smooth_method='bins',smooth_
 	print "Done!"
 	return None
 
+
+"""
+A function to run analyses on logistic regression data. Input is a list of
+directories, so it will analyze one or more animals. Function looks for hdf5 files,
+so any hdf5 files in the directories should only be regression results files.
+Inputs:
+	dir_list: list of directories where data is stored.
+Returns:
+	results: dictionary of results for each directory (animal)
+"""
+def analyze_log_regressions(dir_list):
+	##assume the folder name is the animal name, and that it is two characters
+	##also assuming that we are looking at the following conditions:
+	conditions = ['block_type','choice','reward']
+	for d in dir_list:
+		name = d[-11:-9]
+		##get the list of files in this directory
+		flist = get_file_names(d)
+		flist.sort() ##get them in order of training session
+		##we are looking at 3 things:
+		unit_counts = {} ##number of units encoding each parameter
+		mean_pred = {} ##mean prediction strength of each parameter for significant units
+		for c in conditions:
+			unit_counts[c] = np.zeros(len(flist))
+			mean_pred[c] = np.zeros(len(flist))
+		multi_units = np.zeros(len(flist)) ##the proportion of significant units with multiple representations
+		for n,f in enumerate(flist):
+			##parse the results for this file
+			cond_idx,cond_ps,multis,n_sig = parse_log_regression(f)
+			n_sig = n_sig.size ##just care about how many for now
+			##add the data to the master arrays
+			for c in conditions:
+				unit_counts[c][n] = float(cond_idx[c].size)/n_sig ##here we are computing the proportion, not the total number
+				mean_pred[c][n] = cond_ps[c].mean() ##also take the mean here
+			multi_units[n] = float(multis.size)/n_sig ##also a proportion
+	return unit_counts,mean_pred,multi_units
+
+
 """
 A function to project neural data from various conditions onto various
 axes defined by de-noised regression vectors.
@@ -179,3 +218,14 @@ def get_epoch_idx_dict(f_in):
 		epoch_idx[key] = np.asarray(f[key])
 	f.close()
 	return epoch_idx
+
+##returns a list of file paths for all hdf5 files in a directory
+def get_file_names(directory):
+	##get the current dir so you can return to it
+	cd = os.getcwd()
+	filepaths = []
+	os.chdir(directory)
+	for f in glob.glob("*.hdf5"):
+		filepaths.append(os.path.join(directory,f))
+	os.chdir(cd)
+	return filepaths

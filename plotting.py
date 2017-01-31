@@ -675,6 +675,85 @@ def plot_log_units(X,y,sig_idx):
 	#sigfig.tight_layout()
 	#nonsigfig.tight_layout()
 
+"""
+A function to plot the results of logistic regression
+Inputs:
+	-f_in: file path to hdf5 file where results are stored
+"""
+def plot_log_regression(f_in):
+	##open the file
+	f = h5py.File(f_in,'r')
+	current_file = f_in[-11:-5]
+	##determine some metadata about this file
+	epochs = ['choice','delay','outcome'] ##this isn't everything but all I want to use for now
+	conditions = ['block_type','choice','reward']
+	##how many units total were recorded?
+	n_units = f[epochs[0]]['X'].shape[1]
+	##determine the size of the image matrix based on the number of units
+	side_len = np.ceil(np.sqrt(n_units)).astype(int)
+	##set up the figure with GridSpec
+	fig = plt.figure()
+	gs = gridspec.GridSpec(len(epochs),len(conditions),wspace=0,hspace=0)
+	##a list to store all the image plots
+	cplots = []
+	vmax = 0 ##store the global max an min prediction strengths so we can scale all plots equally
+	vmin = 0
+	##outer loop is for plotting epochs (columns)
+	for n, epoch in enumerate(epochs):
+		##inner loop is for task variables
+		for m, condition in enumerate(conditions):
+			##produce an image matrix of NaNs (should be white); these will later be filled with 
+			##sig unit values when appropriate
+			img_mat = np.empty((side_len,side_len))
+			img_mat[:] = np.nan
+			##now we need to get the data for this set.
+			group = f[epoch][condition]
+			sig_idx = np.asarray(group['sig_idx']) ##the indices of units that were significant 
+			kappas = np.asarray(group['pred_strength']) ##the prediction strength values for *all* units
+			##fill the image matrix with values from the sig units only
+			for s in range(sig_idx.size):
+				idx = sig_idx[s] ##the index of the significant unit out of all units
+				k = kappas[idx] ##the strength of the prediction for this unit
+				if k > vmax:
+					vmax = k
+				if k < vmin:
+					vmin = k
+				##fill the image matrix spot for this unit
+				c,r = rc_idx(idx,side_len)
+				img_mat[r,c] = k
+			##now plot the image matrix
+			ax = plt.subplot(gs[m,n])
+			##if it's the first row, add a title
+			if m == 0:
+				ax.set_title(epoch,fontsize=14,weight='bold')
+			##if it's the first column, add a y-axis label
+			if n == 0:
+				ax.set_ylabel(condition,fontsize=14,weight='bold')
+			if m == len(conditions)-1:
+				ax.set_xlabel("Units")
+			##turn off the x and y labels
+			ax.set_xticklabels([])
+			ax.set_yticklabels([])
+			##plot the actual data
+			cplots.append(ax.imshow(img_mat,interpolation='none',cmap='summer'))
+			for j in range(n_units):
+				r,c = rc_idx(j,side_len)
+				ax.text(r,c,str(j+1))
+	##rescale all plots to the same range
+	for cp in cplots:
+		cp.set_clim(vmin=0,vmax=vmax)
+	##add a colorbar 
+	cbaxes = fig.add_axes([0.05, 0.05, 0.9, 0.025])
+	cb = fig.colorbar(cax=cbaxes,mappable=cplots[0],orientation='horizontal')
+	cbaxes.set_xlabel("Prediction strength",fontsize=14)
+	#cb.set_ticks(np.arange(vmin,vmax))
+	# cbytick_obj = plt.getp(cb.ax.axes, 'xticklabels')
+	# plt.setp(cbytick_obj, fontsize='x-small')
+	f.close()
+	fig.suptitle(current_file,fontsize=16)
+
+
+
 
 """
 A helper function to calculate the mean and 95% CI of some data
@@ -689,3 +768,19 @@ def mean_confidence_interval(a, confidence=0.95):
     for i in range(m.shape[0]):
     	h[i] = se[i] * sp.stats.t._ppf((1+confidence)/2., n-1)
     return m, m-h, m+h
+
+"""
+A helper function to get a column and row value for a square matrix
+given an index referring to the total array size
+Inputs:
+	-idx: index to start with
+	-side_len: length of the side of the square matrix
+Returns:
+	row, col transformation of the given index
+"""
+def rc_idx(idx,side_len):
+	ids = int(idx)
+	side_len = int(side_len)
+	row = idx/side_len
+	col = idx%side_len
+	return row,col
