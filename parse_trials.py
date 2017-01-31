@@ -74,6 +74,7 @@ def ts_to_bins(ts,bin_size):
 	win_lens = ts_bins[:,1]-ts_bins[:,0]
 	mean_len = np.round(win_lens.mean()).astype(int) ##this should be the window length in bins
 	##if one of the windows is a different length, add or subtract a bin to make it equal
+	i = 0
 	while i < win_lens.shape[0]:
 		win_lens = ts_bins[:,1]-ts_bins[:,0]
 		if win_lens[i] != mean_len:
