@@ -131,8 +131,11 @@ def full_log_regression(epoch_durations=[1,0.5,1,1],smooth_method='bins',smooth_
 	for f_behavior,f_ephys in zip(file_lists.behavior_files,file_lists.ephys_files):
 		current_file = f_behavior[-11:-5]
 		print "Starting on file "+current_file
-		results = sa.log_regress_session(f_behavior,f_ephys,epoch_durations=epoch_durations,
-			smooth_method=smooth_method,smooth_width=smooth_width,z_score=z_score,save=save)
+		try:
+			results = sa.log_regress_session(f_behavior,f_ephys,epoch_durations=epoch_durations,
+				smooth_method=smooth_method,smooth_width=smooth_width,z_score=z_score,save=save)
+		except IOError:
+			print current_file+" exists, skipping..."
 	print "Done!"
 	return None
 
