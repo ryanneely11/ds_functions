@@ -104,7 +104,7 @@ def regress_array(X,y):
 	pool.join()
 	sig_results = np.asarray(async_result.get())
 	##determine the index of units with significant predictablility
-	sig_idx = np.where(sig_results<=0.05)
+	sig_idx = np.where(sig_results<=0.01)
 	return sig_idx[0]
 
 """
