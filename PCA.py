@@ -8,6 +8,7 @@ from sklearn.decomposition import PCA
 from scipy.stats import zscore
 import regression as re
 import parse_ephys as pe
+from numpy import linalg as la
 """
 A function to z-score a data matrix
 Inputs:
@@ -117,6 +118,25 @@ def separate_Xz(Xz,T):
     for i in range(num_conditions):
         Xzc[i,:,:] = Xz[:,i*T:(i+1)*T]
     return Xzc
+
+"""
+A function that uses spectral decomposition to find the
+eigenvalues and eigenvectors of a covariance matrix
+Inputs:
+	-C: covariance matrix of the data
+Returns:
+	-w: eigenvalues
+	-v: eigenvectors (PC's)
+"""
+def spectral_decomp(C,X=None,plot=True):
+	w,v = la.eig(C)
+	##organize them in order of most to least variance captured
+	idx = np.argsort(w)[::-1]
+	w = w[idx]
+	v = v[:,idx].T ##rearrange so the first axis indexes the PC vectors
+	if plot:
+		ptt.plot_eigen(C,X,w,v)
+	return w,v
 
 """
 A function to calculate the de-noised neural trajectories

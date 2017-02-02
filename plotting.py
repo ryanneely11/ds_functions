@@ -12,6 +12,7 @@ import parse_trials as ptr
 import h5py
 import scipy.stats
 import scipy as sp
+import session_analysis as sa
 
 """
 A function to plot the significance of the regression. Same as the above function but
@@ -534,15 +535,15 @@ def plot_epoch(directory,plot=True):
 
 ##this function takes in a list of directories where RAW(!) .txt logs are stored
 def plot_epochs_multi(directories):
-	
+	colors = ['r','b','g','k','purple','orange']
 	##assume the folder name is the animal name, and that is is two chars
 	fig = plt.figure()
 	ax = fig.add_subplot(111)
-	for d in directories:
+	for n,d in enumerate(directories):
 		name = d[-11:-9]
 		x, dates, scores = plot_epoch(d, plot = False)
 		##get a random color to plot this data with
-		c = np.random.rand(3,)
+		c = colors[n]
 		ax.plot(x, scores, 's', markersize = 10, color = c)
 		ax.plot(x, scores, linewidth = 2, color = c, label = name)
 	ax.legend(loc=2)
@@ -676,6 +677,80 @@ def plot_log_units(X,y,sig_idx):
 	#nonsigfig.tight_layout()
 
 """
+Another function to plot individual unit results from logistic regression (for one session).
+This one plots only the significant units, but looks at activity over all epochs
+Inputs:
+	-f_in: the data file for logistic regression results
+"""
+def plot_log_units2(f_in):
+	##open the file
+	f = h5py.File(f_in,'r')
+	current_file = f_in[-11:-5]
+	## a LUT for different legend labels
+	LUT = {
+	'block_type':['Upper rewarded','Lower rewarded'],
+	'choice':['Upper lever',"Lower lever"],
+	'reward':['Rewarded','Unrewarded']
+	}
+	##determine some metadata about this file
+	epochs = ['choice','delay','outcome'] ##this isn't everything but all I want to use for now
+	conditions = ['block_type','choice','reward']
+	##we already have a function that will give us all of the units with any significant
+	##predictability, so let' use it
+	cond_idx,cond_ps,multis,n_sig,n_total = sa.parse_log_regression(f_in,epochs) ##n_sig is the array of all sig units
+	##make a separate plot for each unit
+	for t,sig_idx in enumerate(n_sig):
+		fig = plt.figure()
+		gs = gridspec.GridSpec(len(epochs),len(conditions))
+		##outer loop is for plotting epochs (columns)
+		for n, epoch in enumerate(epochs):
+			##get the data matrix for this epoch
+			X = np.asarray(f[epoch]['X'])
+			##inner loop is for task variables
+			for m, condition in enumerate(conditions):
+				##now plot the data
+				ax = plt.subplot(gs[m,n])
+				##get the y-data for the choices
+				y = np.asarray(f[epoch][condition]['y'])
+				##index of trials for the different conditions
+				idx_c1 = np.where(y==0)[0]
+				idx_c2 = np.where(y==1)[0]
+				m_c1 = np.mean(X[idx_c1,sig_idx,:],axis=0) 
+				se_c1 = scipy.stats.sem(X[idx_c1,sig_idx,:],axis=0)
+				m_c2 = np.mean(X[idx_c2,sig_idx,:],axis=0) 
+				se_c2 = scipy.stats.sem(X[idx_c2,sig_idx,:],axis=0)
+				##if it's the first row, add a title
+				if m == 0:
+					ax.set_title(epoch,fontsize=14,weight='bold')
+				##if it's the first column, add a y-axis label
+				if n == 0:
+					ax.set_ylabel("zscore FR for\n"+condition,fontsize=14,weight='bold')
+				else:
+					ax.set_yticklabels([])
+				if m == len(conditions)-1:
+					ax.set_xlabel("Bins",fontsize=14)
+				else:
+					ax.set_xticklabels([])
+				ax.plot(m_c1,color='b',linewidth=2,label=LUT[condition][0])
+				ax.plot(m_c2,color='r',linewidth=2,label=LUT[condition][1])
+				ax.fill_between(np.arange(m_c1.size),m_c1-se_c1,m_c1+se_c1,
+					color='b',alpha=0.5)
+				ax.fill_between(np.arange(m_c2.size),m_c2-se_c2,m_c2+se_c2,
+					color='r',alpha=0.5)
+				##add text to signify the prediction strength
+				if sig_idx in cond_idx[condition]:
+					ax.text(0.1,0.1,"*",fontsize=16,weight='bold',transform=ax.transAxes)
+				if n == 0:
+					ax.set_ylabel("zscore FR for\n"+condition,fontsize=14,weight='bold')
+					ax.legend()
+				else:
+					ax.set_yticklabels([])
+		fig.suptitle("Unit "+str(sig_idx),fontsize=16)
+	f.close()		
+	##TODO identify for which epochs the unit is significant,and add text about the encoding strength
+
+
+"""
 A function to plot the results of logistic regression
 Inputs:
 	-f_in: file path to hdf5 file where results are stored
@@ -752,6 +827,72 @@ def plot_log_regression(f_in):
 	f.close()
 	fig.suptitle(current_file,fontsize=16)
 
+"""
+A function to plot the results from analyzing all log regression files
+Inputs:
+	results: results dictionary returned by fa.analyze_log_regressions
+"""
+def plot_all_log_regressions(results):
+	##make 5 separate figures
+	colors = ['r','b','g','k','purple','orange']
+	##this will be used as a normalizing factor
+	n_totals = results['num_total']
+	n_animals = n_totals.shape[0]
+	##first one is the total percentage of significant units over training
+	fig,ax = plt.subplots(1)
+	##get the data for this plot
+	data = results['num_sig']
+	for i in range(n_animals):
+		ax.plot(100*(data[i,:]/n_totals[i,:]),color=colors[i],linewidth=2,
+			marker='o',label='animal '+str(i))
+		ax.set_xlabel("Training day",fontsize=14)
+		ax.set_ylabel("Percentage of units",fontsize=14)
+		ax.legend(bbox_to_anchor=(1.1, 0.3))
+		ax.set_title("Percent significant of all recorded",fontsize=14)
+	##next one is the block type
+	fig,ax = plt.subplots(1)
+	##get the data for this plot
+	data = results['num_block_type']
+	for i in range(n_animals):
+		ax.plot(100*(data[i,:]/n_totals[i,:]),color=colors[i],linewidth=2,
+			marker='o',label='animal '+str(i))
+		ax.set_xlabel("Training day",fontsize=14)
+		ax.set_ylabel("Percentage of units",fontsize=14)
+		ax.legend(bbox_to_anchor=(1.1, 0.3))
+		ax.set_title("Percent of significant units encoding block type",fontsize=14)
+	##next one is the choice
+	fig,ax = plt.subplots(1)
+	##get the data for this plot
+	data = results['num_choice']
+	for i in range(n_animals):
+		ax.plot(100*(data[i,:]/n_totals[i,:]),color=colors[i],linewidth=2,
+			marker='o',label='animal '+str(i))
+		ax.set_xlabel("Training day",fontsize=14)
+		ax.set_ylabel("Percentage of units",fontsize=14)
+		ax.legend(bbox_to_anchor=(1.1, 0.3))
+		ax.set_title("Percent of significant units encoding choice",fontsize=14)
+	##next one is the reward
+	fig,ax = plt.subplots(1)
+	##get the data for this plot
+	data = results['num_reward']
+	for i in range(n_animals):
+		ax.plot(100*(data[i,:]/n_totals[i,:]),color=colors[i],linewidth=2,
+			marker='o',label='animal '+str(i))
+		ax.set_xlabel("Training day",fontsize=14)
+		ax.set_ylabel("Percentage of units",fontsize=14)
+		ax.legend(bbox_to_anchor=(1.1, 0.3))
+		ax.set_title("Percent of significant units encoding reward",fontsize=14)
+	##next one is multi-units
+	fig,ax = plt.subplots(1)
+	##get the data for this plot
+	data = results['multi_units']
+	for i in range(n_animals):
+		ax.plot(100*(data[i,:]/n_totals[i,:]),color=colors[i],linewidth=2,
+			marker='o',label='animal '+str(i))
+		ax.set_xlabel("Training day",fontsize=14)
+		ax.set_ylabel("Percentage of units",fontsize=14)
+		ax.legend(bbox_to_anchor=(1.1, 0.3))
+		ax.set_title("Percent of significant units encoding multiple params",fontsize=14)
 
 
 

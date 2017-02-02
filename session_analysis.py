@@ -215,14 +215,21 @@ A function to parse log regression results. For now, it will do two things:
 2) determine the number of units that have overlapping representations, again pooling all epochs
 Inputs:
 	f_in: file name of log regression data file
+	epochs: optional list; if specified, only takes data from a given epoch or epochs. 
+		Otherwise data from all epochs is pooled.  
 REturns:
-	results: dictionary of results
+	cond_idx: the indices of units that differentiate between different parameters
+	cond_kappas: the prediction quality values of significant units
+	multi_units: list of indices of units that encode multiple parameters
+	all_sig: the full list of significant unit indices
+	total_units: (int), the total number of units for this session
 """
-def parse_log_regression(f_in):
+def parse_log_regression(f_in,epochs=None):
 	##open the data file
 	f = h5py.File(f_in,'r')
 	##let's start by pooling data from all epochs
-	epochs = f.keys()
+	if epochs is None:
+		epochs = f.keys()
 	conditions = [x for x in f[epochs[0]].keys() if x != 'X'] ##the data matrix is also stored here
 	##let's make a dictionary of indices for each condition, pooling across epochs
 	##for the hell of it we'll also keep info about the prediction strengths
@@ -230,6 +237,7 @@ def parse_log_regression(f_in):
 	cond_kappas = {}
 	##keep track all the unique significant units
 	all_sig = []
+	n_total = 0 ## the total number of units
 	for c in conditions:
 		cond_idx[c] = []
 		cond_kappas[c] = []
@@ -237,6 +245,7 @@ def parse_log_regression(f_in):
 		for c in conditions:
 			sig_idx = np.asarray(f[e][c]['sig_idx'])
 			ps = np.asarray(f[e][c]['pred_strength'])[sig_idx] ##make sure to only take the sig values!
+			n_total = np.asarray(f[e][c]['pred_strength']).size
 			##add this data to the dictionary
 			for p in ps:
 				cond_kappas[c].append(p)
@@ -254,6 +263,6 @@ def parse_log_regression(f_in):
 	assert len(conditions) == 3
 	multi_units = reduce(np.intersect1d,(cond_idx[conditions[0]],cond_idx[conditions[1]],
 		cond_idx[conditions[2]]))
-	return cond_idx,cond_kappas,multi_units,np.asarray(all_sig)
+	return cond_idx,cond_kappas,multi_units,np.asarray(all_sig),n_total
 
 

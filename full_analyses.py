@@ -146,35 +146,57 @@ directories, so it will analyze one or more animals. Function looks for hdf5 fil
 so any hdf5 files in the directories should only be regression results files.
 Inputs:
 	dir_list: list of directories where data is stored.
+	epochs: list, optional. If you only want to take data from certain epochs.
 Returns:
 	results: dictionary of results for each directory (animal)
 """
-def analyze_log_regressions(dir_list):
+def analyze_log_regressions(dir_list,epochs=None):
 	##assume the folder name is the animal name, and that it is two characters
 	##also assuming that we are looking at the following conditions:
-	conditions = ['block_type','choice','reward']
+	##set up the results dictionary
+	results = {
+		'num_block_type':[],
+		'num_choice':[],
+		'num_reward':[],
+		'multi_units':[],
+		'num_sig':[],
+		'num_total':[]}
 	for d in dir_list:
 		name = d[-11:-9]
 		##get the list of files in this directory
 		flist = get_file_names(d)
 		flist.sort() ##get them in order of training session
-		##we are looking at 3 things:
-		unit_counts = {} ##number of units encoding each parameter
-		mean_pred = {} ##mean prediction strength of each parameter for significant units
-		for c in conditions:
-			unit_counts[c] = np.zeros(len(flist))
-			mean_pred[c] = np.zeros(len(flist))
-		multi_units = np.zeros(len(flist)) ##the proportion of significant units with multiple representations
+		n_bt = np.zeros(len(flist)) ##these are the arrays to go into the results lists
+		n_c = np.zeros(len(flist))
+		n_r = np.zeros(len(flist))
+		n_mu = np.zeros(len(flist))
+		n_s = np.zeros(len(flist))
+		n_t = np.zeros(len(flist))
 		for n,f in enumerate(flist):
 			##parse the results for this file
-			cond_idx,cond_ps,multis,n_sig = parse_log_regression(f)
-			n_sig = n_sig.size ##just care about how many for now
-			##add the data to the master arrays
-			for c in conditions:
-				unit_counts[c][n] = float(cond_idx[c].size)/n_sig ##here we are computing the proportion, not the total number
-				mean_pred[c][n] = cond_ps[c].mean() ##also take the mean here
-			multi_units[n] = float(multis.size)/n_sig ##also a proportion
-	return unit_counts,mean_pred,multi_units
+			cond_idx,cond_ps,multis,n_sig,n_total = sa.parse_log_regression(f,epochs)
+			##add the data to the arrays
+			n_bt[n] = cond_idx['block_type'].size
+			n_c[n] = cond_idx['choice'].size
+			n_r[n] = cond_idx['reward'].size
+			n_mu[n] = multis.size
+			n_s[n] = n_sig.size
+			n_t[n] = n_total
+		##now add the data to the master lists
+		results['num_block_type'].append(n_bt)
+		results['num_choice'].append(n_c)
+		results['num_reward'].append(n_r)
+		results['multi_units'].append(n_mu)
+		results['num_sig'].append(n_s)
+		results['num_total'].append(n_t)	
+	##now get these all into a pretty array
+	results['num_block_type'] = equalize_arrs(results['num_block_type'])
+	results['num_choice'] = equalize_arrs(results['num_choice'])
+	results['num_reward'] = equalize_arrs(results['num_reward'])
+	results['multi_units'] = equalize_arrs(results['multi_units'])
+	results['num_sig'] = equalize_arrs(results['num_sig'])
+	results['num_total'] = equalize_arrs(results['num_total'])
+	return results
 
 
 """
@@ -232,3 +254,22 @@ def get_file_names(directory):
 		filepaths.append(os.path.join(directory,f))
 	os.chdir(cd)
 	return filepaths
+
+"""
+a function to equalize the length of different-length arrays
+by adding np.nans
+Inputs:
+	-list of arrays (1-d) of different shapes
+Returns:
+	2-d array of even size
+"""
+def equalize_arrs(arrlist):
+	longest = 0
+	for i in range(len(arrlist)):
+		if arrlist[i].shape[0] > longest:
+			longest = arrlist[i].shape[0]
+	result = np.zeros((len(arrlist),longest))
+	result[:] = np.nan
+	for i in range(len(arrlist)):
+		result[i,0:arrlist[i].shape[0]] = arrlist[i]
+	return result
