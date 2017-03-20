@@ -13,6 +13,55 @@ import h5py
 from functools import reduce
 
 """
+A function to get a data array of trials for a given session.
+Resulting data array is in the order n_trials x n_neurons x n_timpoints.
+Also returned is a ductionary with information about trial types.
+Inputs:
+	f_behavior: path to the behavior timestamps
+	f_ephys: path to the spike data
+	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	pad: a window for pre- and post-trial padding, in ms. In other words, an x-ms period of time 
+		before lever press to consider the start of the trial, and an x-ms period of time after
+		reward to consider the end of the trial
+	z_score: if True, z-scores the array
+	timestretch: if True, uses the time stretching function (below) to equate the lengths of all trials.
+Returns:
+	X: data list of shape n-trials x n-neurons x n-timebins
+	ts_idx: dictionary indicating which subsets of trials belong to various trial types
+"""
+def split_trials(f_behavior,f_ephys,smooth_method='bins',smooth_width=50,
+	pad=[200,200],z_score=False,timestretch=False):
+	##get the raw data matrix first 
+	X_raw = pe.get_spike_data(f_ephys,smooth_method='none',smooth_width=None,
+		z_score=False) ##don't zscore or smooth anything yet
+	##now get the window data for the trials in this session
+	ts,ts_idx = pt.get_trial_data(f_behavior) #ts is shape trials x ts, and in seconds
+	##now, convert to ms and add padding 
+	ts = ts*1000.0
+	trial_wins = ts ##save the raw ts for later, and add the padding to get the full trial windows
+	trial_wins[:,0] = trial_wins[:,0] - pad[0]
+	trial_wins[:,1] = trial_wins[:,1] + pad[0]
+	##now get the windowed data around the trial times. Return value is a list of the trials
+	X_trials = pe.X_windows(X_raw,ts)
+	##now do the smoothing, if requested
+	if smooth_method != 'none':
+		for t in range(len(X_trials)):
+			X_trials[t] = pe.smooth_spikes(X_trials[t],smooth_method,smooth_width)
+	##now, do timestretching, if requested
+	if timestretch:
+		pass
+	##now z-score, if requested
+	if z_score:
+		for a in range(len(X_trials)):
+			X_trials[a] = zscore(X_trials[a])
+	return X_trials
+
+
+
+
+"""
 a function to run regression analyses over 
 all epochs in a single session. 
 Inputs:
@@ -265,4 +314,15 @@ def parse_log_regression(f_in,epochs=None):
 		cond_idx[conditions[2]]))
 	return cond_idx,cond_kappas,multi_units,np.asarray(all_sig),n_total
 
+"""
+A function to equate the lengths of trials by using a piecewise
+linear stretching procedure, outlined in 
+
+"Kobak D, Brendel W, Constantinidis C, et al. Demixed principal component analysis of neural population data. 
+van Rossum MC, ed. eLife. 2016;5:e10989. doi:10.7554/eLife.10989."
+
+Inputs:
+	X_trials: a list containing ephys data from a variety of trials
+
+"""
 

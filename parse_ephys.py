@@ -11,8 +11,9 @@ A function to return a spike data matrix from
 a single recording session, of dims units x bins
 Inputs:
 	f_in: data file to get the spikes from
-	smooth_method: type of smoothing to use; choose 'bins', 'gauss', or 'none'
-	smooth_width: size of the bins or gaussian kernel in ms
+	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	smooth_width: size of the bins or gaussian kernel in ms. If both, input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
 	z_score: if True, z-scores the array
 	$$NOTE$$: this implementatin does not allow binning AND gaussian smoothing.
 Returns:
@@ -36,19 +37,7 @@ def get_spike_data(f_in,smooth_method='bins',smooth_width=50,z_score=False):
 		X[n,:] = pt_times_to_binary(np.asarray(f[u]),duration)
 	f.close()
 	##now smooth, if requested
-	if smooth_method == 'bins':
-		Xbins = []
-		for a in range(X.shape[0]):
-			Xbins.append(bin_spikes(X[a,:],smooth_width))
-		X = np.asarray(Xbins)
-	elif smooth_method == 'gauss':
-		for a in range(X.shape[0]):
-			X[a,:] = gauss_convolve(X[a,:],smooth_width)
-	elif smooth_method == 'none':
-		pass
-	else:
-		raise KeyError("Unrecognized bin method")
-		X = None
+	X = smooth_spikes(X,smooth_method,smooth_width)
 	if z_score:
 		for a in range(X.shape[0]):
 			X[a,:] = zscore(X[a,:])
@@ -61,18 +50,21 @@ Inputs:
 	windows: array of windows to use to parse the data array; 
 		##NEEDS TO BE IN THE SAME UNITS OF TIME AS X### (shape trials x (start,stop))
 Returns:
-	Xw: data array of trials x units x bins/time
+	Xw: data LIST of trials x (units x bins/time). Not converting to an array in order
+		to support trials of different lengths
 """
 def X_windows(X,windows):
-	##add some padding onto the end of the X array in case some of the windows ovverrun
-	##the session. TODO: might need to also add padding to the start of the array (but that changes the ts)
+	##add some padding onto the ends of the X array in case some of the windows ovverrun
+	##the session. 
 	pad = np.zeros((X.shape[0],1000))
-	X = np.hstack((X,pad))
-	##allocate memory for the return array
-	Xw = np.zeros((windows.shape[0],X.shape[0],(windows[0,1]-windows[0,0])))
+	X = np.hstack((pad,X,pad))
+	##now add to the timestamps to account for the offset
+	windows = windows+1000
+	##allocate a list for the return array
+	Xw = []
 	for t in range(windows.shape[0]): ##go through each window
 		idx = np.arange(windows[t,0],windows[t,1]) ##the indices of the data for this window
-		Xw[t,:,:] = X[:,idx]
+		Xw.append(X[:,idx])
 	return Xw
 
 """
@@ -162,6 +154,42 @@ def bin_spikes(data,bin_width):
 	return np.asarray(bin_vals)
 
 """
+A helper function to do spike smoothing. 
+Inputs: 
+	X: 2-d data array in the shape units x timebins (assuming 1 ms bins here),
+		and value of each bin is a spike count)
+	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	smooth_width: size of the bins or gaussian kernel in ms. If both, input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	Returns: 
+		X: smoothed version of X
+"""
+def smooth_spikes(X,smooth_method,smooth_width):
+	if smooth_method == 'bins':
+		Xbins = []
+		for a in range(X.shape[0]):
+			Xbins.append(bin_spikes(X[a,:],smooth_width))
+		X = np.asarray(Xbins)
+	elif smooth_method == 'gauss':
+		for a in range(X.shape[0]):
+			X[a,:] = gauss_convolve(X[a,:],smooth_width)
+	elif smooth_method == 'both':
+		##first smooth with a kernel 
+		for a in range(X.shape[0]):
+			X[a,:] = gauss_convolve(X[a,:],smooth_width[0])
+		##now bin the data
+		Xbins = []
+		for a in range(X.shape[0]):
+			Xbins.append(bin_spikes(X[a,:],smooth_width[1]))
+		X = np.asarray(Xbins)
+	elif smooth_method == 'none':
+		pass
+	else:
+		raise KeyError("Unrecognized bin method")
+		X = None
+	return X
+
+"""
 A helper function that takes a data array of form
 trials x units x bins/time, and concatenates all the trials,
 so the result is in the form units x (trialsxbins)
@@ -172,3 +200,5 @@ Returns:
 """
 def concatenate_trials(X):
 	return np.concatenate(X,axis=1)
+
+
