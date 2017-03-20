@@ -304,7 +304,7 @@ def ao_duration_analysis(f_in):
 takes in a data dictionary produced by parse_log
 plots the lever presses and the switch points for levers
 """
-def plot_presses(f_in, sigma = 20):
+def plot_presses(f_in, sigma = 5):
 	##extract relevant data
 	data_dict = h5py.File(f_in,'r')
 	top = data_dict['top_lever']
@@ -841,58 +841,93 @@ def plot_all_log_regressions(results):
 	##first one is the total percentage of significant units over training
 	fig,ax = plt.subplots(1)
 	##get the data for this plot
-	data = results['num_sig']
+	data = (results['num_sig']/n_totals)*100
+	mean = np.nanmean(data,axis=0)
+	sem = np.nanstd(data,axis=0)/np.sqrt(data.shape[0])
+	ax.errorbar(np.arange(0,mean.shape[0]),mean,linewidth=4,color='k',yerr=sem)
 	for i in range(n_animals):
-		ax.plot(100*(data[i,:]/n_totals[i,:]),color=colors[i],linewidth=2,
-			marker='o',label='animal '+str(i))
+		ax.plot(data[i,:],color=colors[i],linewidth=2,
+			alpha=0.5,label='animal '+str(i))
 		ax.set_xlabel("Training day",fontsize=14)
 		ax.set_ylabel("Percentage of units",fontsize=14)
 		ax.legend(bbox_to_anchor=(1.1, 0.3))
 		ax.set_title("Percent significant of all recorded",fontsize=14)
+	for tick in ax.xaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	for tick in ax.yaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
 	##next one is the block type
 	fig,ax = plt.subplots(1)
 	##get the data for this plot
-	data = results['num_block_type']
+	data = (results['num_block_type']/n_totals[i,:])*100
+	mean = np.nanmean(data,axis=0)
+	sem = np.nanstd(data,axis=0)/np.sqrt(data.shape[0])
+	ax.errorbar(np.arange(0,mean.shape[0]),mean,linewidth=4,color='k',yerr=sem)
 	for i in range(n_animals):
-		ax.plot(100*(data[i,:]/n_totals[i,:]),color=colors[i],linewidth=2,
-			marker='o',label='animal '+str(i))
+		ax.plot(data[i,:],color=colors[i],linewidth=2,
+			alpha=0.5,label='animal '+str(i))
 		ax.set_xlabel("Training day",fontsize=14)
 		ax.set_ylabel("Percentage of units",fontsize=14)
 		ax.legend(bbox_to_anchor=(1.1, 0.3))
 		ax.set_title("Percent of significant units encoding block type",fontsize=14)
+	for tick in ax.xaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	for tick in ax.yaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
 	##next one is the choice
 	fig,ax = plt.subplots(1)
 	##get the data for this plot
-	data = results['num_choice']
+	data = (results['num_choice']/n_totals)*100
+	mean = np.nanmean(data,axis=0)
+	sem = np.nanstd(data,axis=0)/np.sqrt(data.shape[0])
+	ax.errorbar(np.arange(0,mean.shape[0]),mean,linewidth=4,color='k',yerr=sem)
 	for i in range(n_animals):
-		ax.plot(100*(data[i,:]/n_totals[i,:]),color=colors[i],linewidth=2,
-			marker='o',label='animal '+str(i))
+		ax.plot(data[i,:],color=colors[i],linewidth=2,
+			alpha=0.5,label='animal '+str(i))
 		ax.set_xlabel("Training day",fontsize=14)
 		ax.set_ylabel("Percentage of units",fontsize=14)
 		ax.legend(bbox_to_anchor=(1.1, 0.3))
 		ax.set_title("Percent of significant units encoding choice",fontsize=14)
+	for tick in ax.xaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	for tick in ax.yaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
 	##next one is the reward
 	fig,ax = plt.subplots(1)
 	##get the data for this plot
-	data = results['num_reward']
+	data = (results['num_reward']/n_totals)*100
+	mean = np.nanmean(data,axis=0)
+	sem = np.nanstd(data,axis=0)/np.sqrt(data.shape[0])
+	ax.errorbar(np.arange(0,mean.shape[0]),mean,linewidth=4,color='k',yerr=sem)
 	for i in range(n_animals):
-		ax.plot(100*(data[i,:]/n_totals[i,:]),color=colors[i],linewidth=2,
-			marker='o',label='animal '+str(i))
+		ax.plot(data[i,:],color=colors[i],linewidth=2,
+			alpha=0.5,label='animal '+str(i))
 		ax.set_xlabel("Training day",fontsize=14)
 		ax.set_ylabel("Percentage of units",fontsize=14)
 		ax.legend(bbox_to_anchor=(1.1, 0.3))
 		ax.set_title("Percent of significant units encoding reward",fontsize=14)
+	for tick in ax.xaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	for tick in ax.yaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
 	##next one is multi-units
 	fig,ax = plt.subplots(1)
 	##get the data for this plot
-	data = results['multi_units']
+	data = (results['multi_units']/n_totals)*100
+	mean = np.nanmean(data,axis=0)
+	sem = np.nanstd(data,axis=0)/np.sqrt(data.shape[0])
+	ax.errorbar(np.arange(0,mean.shape[0]),mean,linewidth=4,color='k',yerr=sem)
 	for i in range(n_animals):
-		ax.plot(100*(data[i,:]/n_totals[i,:]),color=colors[i],linewidth=2,
-			marker='o',label='animal '+str(i))
+		ax.plot(data[i,:],color=colors[i],linewidth=2,
+			alpha=0.5,label='animal '+str(i))
 		ax.set_xlabel("Training day",fontsize=14)
 		ax.set_ylabel("Percentage of units",fontsize=14)
 		ax.legend(bbox_to_anchor=(1.1, 0.3))
 		ax.set_title("Percent of significant units encoding multiple params",fontsize=14)
+	for tick in ax.xaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	for tick in ax.yaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
 
 
 

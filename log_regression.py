@@ -5,7 +5,6 @@ import numpy as np
 from sklearn import linear_model
 from sklearn.model_selection import cross_val_score, KFold
 from sklearn.metrics import make_scorer, accuracy_score
-import plotting as ptt
 import multiprocessing as mp
 
 """
