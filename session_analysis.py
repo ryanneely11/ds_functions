@@ -52,6 +52,14 @@ def split_trials(f_behavior,f_ephys,smooth_method='bins',smooth_width=50,
 	##now, do timestretching, if requested
 	if timestretch:
 		pass
+"""
+#####################################################################
+###########TODO##############
+##need to decide when and how to do smoothing. Interpolation will probably work better
+on smoothed data, but if I smooth the full session data including binning, then the trial
+timestamps lose some accuracy and taking the data windows will result in some jitter.
+
+"""
 	##now z-score, if requested
 	if z_score:
 		for a in range(len(X_trials)):
@@ -322,7 +330,97 @@ linear stretching procedure, outlined in
 van Rossum MC, ed. eLife. 2016;5:e10989. doi:10.7554/eLife.10989."
 
 Inputs:
-	X_trials: a list containing ephys data from a variety of trials
+	X_trials: a list containing ephys data from a variety of trials. This function assumes
+		that trials are all aligned to the first event. data for each trial should be cells x timebins
+	ts: array of timestamps used to generate the ephys trial data. 
+		***These timestamps should be relative to the start of each trial. 
+			for example, if a lever press happens 210 ms into the start of trial 11,
+			the timestamp for that event should be 210.***
 
 """
+def stretch_trials(X_trials,ts):
+	##determine how many events we have
+	n_events = ts.shape[1]
+	##and how many trials
+	n_trials = len(X_trials)
+	##and how many neurons
+	n_neurons = X_trials[0].shape[0]
+	pieces = [] ##this will be a list of each streched epoch piece
+	##check to see if the first event is aligned to the start of the data,
+	##or if there is some pre-event data included.
+	if not np.all(ts[:,0]==0):
+		##make sure each trial is padded the same amount
+		if np.all(ts[:,0]==ts[0,0]):
+			pad1 = ts[0,0] ##this should be the pre-event window for all trials
+			##add this first piece to the collection
+			data = np.zeros((n_trials,n_neurons,pad1))
+			for t in range(n_trials):
+				data[t,:,:] = X_trials[t][:,0:pad1]
+			pieces.append(data)
+		else:
+			print "First event is not aligned for all trials"
+	##do the timestretching for each event epoch individually
+	for e in range(1,n_events):
+		##get just the interval for this particular epoch
+		epoch_ts = ts[:,e-1:e+1]
+		##now get the median duration of this epoch for all trials as an integer. 
+		median_dur = int(np.ceil(np.median(epoch_ts[:,1]-epoch_ts[:,0])))
+		xnew = np.arange(median_dur) ##this will be the timebase of the interpolated trials
+		data = np.zeros((n_trials,n_neurons,xnew.shape[0]))
+		##now operate on each trial, over this particular epoch
+		for t in range(n_trials):
+			##get the actual data for this trial
+			trial_data = X_trials[t]
+			##now, trial_data is in the shape units x bins.
+			##we need to interpolate data from each unit individually:
+			for n in range(trial_data.shape[0]):
+				##get the data for neuron n in trial t and epoch e
+				y = trial_data[n,epoch_ts[t,0]:epoch_ts[t,1]]
+				x = np.arange(y.shape[0])
+				##create an interpolation object for these data
+				f = interpolate.interp1d(x,y,bounds_error=False,fill_value='extrapolate')
+				##now use this function to interpolate the data into the 
+				##correct size
+				ynew = f(xnew)
+				##now put the data into its place
+				data[t,n,:] = ynew
+		pieces.append(data)
+	##finally, see if the ephys data has any padding after the final event
+	##collect the differences between the last timestamp of each trial and the trial length
+	t_diff = np.zeros(n_trials)
+	for i in range(n_trials):
+		t_diff[i] = X_trials[i].shape[1]-ts[i,-1]
+	if not np.all(t_diff<=1):
+		##make sure padding is equal for all trials
+		if np.all(t_diff==t_diff[0]):
+			pad2 = tdiff[0]
+			data = np.zeros((n_trials,n_neurons,pad2))
+			for t in range(n_trials):
+				data[t,:,:] = X_trials[t][:,-pad2:]
+			pieces.append(data)
+		else:
+			print "Last event has uneven padding"
+			pad2 = np.floor(tdiff[0]).astype(int)
+			data = np.zeros((n_trials,n_neurons,pad2))
+			for t in range(n_trials):
+				data[t,:,:] = X_trials[t][:,-pad2:]
+				pieces.append(data)
+	##finally, concatenate everything together!
+	X = np.concatenate(pieces,axis=2)
+	return X
 
+
+"""
+A helper function to align event timestamps with session-relative values 
+to be relative to individual trials.
+Inputs:
+	ts: an array of timestamps in the shape trials x (ts_1,...ts_n)
+Returns:
+	ts_rel an array of timestamps relative to the start of each trial
+"""
+def align_ts(ts):
+	##alocate memory for the output
+	ts_rel = np.zeros(ts.shape)
+	for i in range(1,ts.shape[1]):
+		ts_rel[:,i] = ts[:,i]-ts[:,0]
+	return ts_rel
