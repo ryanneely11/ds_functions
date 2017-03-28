@@ -10,15 +10,17 @@ of what catagory each trial falls into (ie rewarded, unrewarded,
 upper lever, etc)
 Inputs:
 	-f_in: file path to where the data is
+	-remove_unrew: if True, excludes trials where the response was correct,
+		but the trial was still unrewarded
 Returns:
 	-ts: trial x event array. Axis 0 is trials, axis 1 is action, outcome
 	-ts_idx: dictionary of array containing the indices of different 
 		trial types.
 """
-def get_trial_data(f_in):
+def get_trial_data(f_in,remove_unrew=False):
 	ts_idx = {}
 	##sort_by_trial does most of the work:
-	block_data = sort_by_trial(f_in)
+	block_data = sort_by_trial(f_in,remove_unrew=remove_unrew)
 	##now just parse the TS a little further
 	block_types = block_data.keys() ##keep the block order (upper_rewarded, etc consistent)
 	##make sure we only have 2 block types (excpected)
@@ -51,6 +53,8 @@ def get_trial_data(f_in):
 	Inputs:
 		f_in: the file path pointing to an hdf5 file containing
 		the behavior event time stamps
+		-remove_unrew: if True, excludes trials where the response was correct,
+			but the trial was still unrewarded
 	Returns: 
 		Two n-trial x i behavioral events-sized arrays.
 		One contains all trials where the lower lever is rewarded;
@@ -58,7 +62,7 @@ def get_trial_data(f_in):
 		Behavioral events are indexed temporally:
 		0-trial start; 1-action (U or L); 2-poke(R or U)
 """
-def sort_by_trial(f_in):
+def sort_by_trial(f_in,remove_unrew=False):
 	#load data file
 	f = h5py.File(f_in,'r')
 	#get the arrays of timestamps into a dictionary in memory
@@ -85,6 +89,9 @@ def sort_by_trial(f_in):
 		for lb in range(len(block_times['lower'])):
 			block_data = get_block_data(block_times['lower'][lb],data_dict)
 			trial_times = sort_block(block_data)
+			##remove correct unrewarded, if requested
+			if remove_unrew:
+				trial_times = remove_correct_unrewarded(trial_times,'lower_rewarded')
 			##case where there is a dictionary entry
 			try:
 				result['lower_rewarded'] = np.vstack((result['lower_rewarded'],trial_times))
@@ -97,6 +104,9 @@ def sort_by_trial(f_in):
 		for ub in range(len(block_times['upper'])):
 			block_data = get_block_data(block_times['upper'][ub],data_dict)
 			trial_times = sort_block(block_data)
+			##remove correct unrewarded, if requested
+			if remove_unrew:
+				trial_times = remove_correct_unrewarded(trial_times,'upper_rewarded')
 			##case where there is a dictionary entry
 			try:
 				result['upper_rewarded'] = np.vstack((result['upper_rewarded'],trial_times))
@@ -295,3 +305,36 @@ def get_block_data(block_edges,data_dict):
 	else:
 		result['trial_start'] = np.delete(result['trial_start'],-1)
 	return result
+
+
+
+"""
+A helper function to remove trials that are correct, but unrewarded.
+Inputs:
+	block_ts: array of timestamps for one block, in shape trials x ts 
+		(see sort_block output)
+	block_type: either 'upper_rewarded' or 'lower_rewarded'
+Returns:
+	clean_ts: same block of timestamps, but with correct, unrewarded trials removed
+"""
+def remove_correct_unrewarded(block_ts,block_type):
+	##block_ts[:,0] is trial start time, so we can ignore it
+	to_remove = [] ##index of trials to remove
+	##we have two cases:
+	if block_type == 'upper_rewarded':
+		for trial in range(block_ts.shape[0]):
+			##if this trial was correct but unrewarded, mark for removal
+			if (block_ts[trial,1]>0) and (block_ts[trial,2]<0):
+				to_remove.append(trial)
+	elif block_type == 'lower_rewarded':
+		for trial in range(block_ts.shape[0]):
+			##if this trial was correct but unrewarded, mark for removal
+			if (block_ts[trial,1]<0) and (block_ts[trial,2]<0):
+				to_remove.append(trial)
+	else:
+		raise KeyError("Unrecognized block type")
+	##get the indices of all trials we want to keep
+	clean_idx = [x for x in np.arange(block_ts.shape[0]) if not x in to_remove]
+	##get a new array with only these trials
+	clean_ts = block_ts[clean_idx,:]
+	return clean_ts

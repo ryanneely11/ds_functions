@@ -13,6 +13,8 @@ import h5py
 import scipy.stats
 import scipy as sp
 import session_analysis as sa
+import matplotlib as ml
+import dpca
 
 """
 A function to plot the significance of the regression. Same as the above function but
@@ -929,7 +931,82 @@ def plot_all_log_regressions(results):
 	for tick in ax.yaxis.get_major_ticks():
 		tick.label.set_fontsize(14)
 
+"""
+A function to plot a spike raster. 
+Inputs:
+	spikes: an n-trials x n-neuron x n-timebins array of data
+	color: color of hash marks
+	n_trials: number of trials to plot (too many crowds the plot)
+"""
+def plot_raster(spike_trains,color='k',n_trials=10):
+	trial_len = spike_trains.shape[2] ##length of one trial
+	for t in range(n_trials):
+			plt.vlines(t*trial_len,0,spike_trains.shape[1],color='r',linestyle='dashed',linewidth=2)
+			for train in range(spike_trains.shape[1]):
+				plt.vlines(ml.mlab.find(spike_trains[t,train,:]>0)+t*trial_len,
+					0.5+train,1.5+train,color=color)
+	plt.title('Raster plot',fontsize=14)
+	plt.xlabel('bins',fontsize=14)
+	plt.ylabel('trial',fontsize=14)
+	plt.show()
 
+
+"""
+Plots a sample of the raw data matrix, X.
+Inputs:
+	-X; raw data matrix; trials x neurons x bins
+	-n_trials: number of trials to plot
+"""
+def plot_X_sample(X,n_trials=10):
+	fig, ax = plt.subplots(1)
+	trial_len = X.shape[2]
+	##collapse the data matrix along the time axis
+	X_cat = np.concatenate(X,axis=1)
+	cax=ax.imshow(X_cat[:,:trial_len*n_trials],origin='lower',interpolation='none',aspect='auto')
+	x = np.arange(0,trial_len*n_trials,trial_len)
+	ax.vlines(x,0,X_cat.shape[0], linestyle='dashed',color='white')
+	ax.set_ylabel("Neuron #",fontsize=16)
+	ax.set_xlabel("Bin #", fontsize=16)
+	cb = fig.colorbar(cax,label="spikes rate, zscore")
+	fig.set_size_inches(10,6)
+	fig.suptitle("Showing first "+str(n_trials)+" trials",fontsize=16)
+
+"""
+A function to plot the results of dpca. 
+Inputs:
+	Z: transformed spike matrix (output from dpca.session_dpca)
+	time: time axis (output from dpca.session_dpca)
+"""
+def plot_dpca_results(Z,time,sig_masks,var_explained,n_components=3):
+	##get the condition LUT dictionary from the dpca module
+	LUT = dpca.condition_LUT
+	##set up the figure
+	fig = plt.figure()
+	n_conditions = len(LUT.keys())
+	##we'll plot the first n dPC's for each condition
+	for c in range(n_conditions):
+		condition = LUT.keys()[c]
+		title = LUT[condition]
+		data = Z[condition]
+		for p in range(n_components):
+			plotnum = (c*n_conditions)+(p+1)
+			print plotnum
+			ax = fig.add_subplot(n_conditions,n_components,plotnum)
+			ax.plot(time,data[p,0,0,:],color='r',linewidth=2,label='Upper lever, correct')
+			ax.plot(time,data[p,1,1,:],color='b',linewidth=2,label='Lower lever, correct')
+			ax.plot(time,data[p,0,1,:],color='r',linewidth=2,label='Lower lever, incorrect')
+			ax.plot(time,data[p,1,0,:],color='r',linewidth=2,label='Upper lever, incorrect')
+			if c+1 == n_conditions:
+				ax.set_xlabel('Time in trial, ms',fontsize=14)
+				for tick in ax.xaxis.get_major_ticks():
+					tick.label.set_fontsize(14)
+			else: 
+				ax.set_xticklabels([])
+			if p == 0:
+				ax.set_ylabel(title,fontsize=14)
+			if c == 0:
+				ax.set_title("Component "+str(p),fontsize=14)
+	plt.show()
 
 """
 A helper function to calculate the mean and 95% CI of some data

@@ -11,6 +11,8 @@ import log_regression as lr
 import os
 import h5py
 from functools import reduce
+from scipy import interpolate
+from scipy.stats import zscore
 
 """
 A function to get a data array of trials for a given session.
@@ -32,39 +34,77 @@ Returns:
 	ts_idx: dictionary indicating which subsets of trials belong to various trial types
 """
 def split_trials(f_behavior,f_ephys,smooth_method='bins',smooth_width=50,
-	pad=[200,200],z_score=False,timestretch=False):
+	pad=[200,200],z_score=False,timestretch=False,remove_unrew=False):
 	##get the raw data matrix first 
 	X_raw = pe.get_spike_data(f_ephys,smooth_method='none',smooth_width=None,
 		z_score=False) ##don't zscore or smooth anything yet
 	##now get the window data for the trials in this session
-	ts,ts_idx = pt.get_trial_data(f_behavior) #ts is shape trials x ts, and in seconds
+	ts,ts_idx = pt.get_trial_data(f_behavior,remove_unrew=remove_unrew) #ts is shape trials x ts, and in seconds
 	##now, convert to ms and add padding 
 	ts = ts*1000.0
-	trial_wins = ts ##save the raw ts for later, and add the padding to get the full trial windows
+	trial_wins = ts.astype(int) ##save the raw ts for later, and add the padding to get the full trial windows
 	trial_wins[:,0] = trial_wins[:,0] - pad[0]
-	trial_wins[:,1] = trial_wins[:,1] + pad[0]
+	trial_wins[:,1] = trial_wins[:,1] + pad[1]
+	##convert this array to an integer so we can use it as indices
+	trial_wins = trial_wins.astype(int)
 	##now get the windowed data around the trial times. Return value is a list of the trials
-	X_trials = pe.X_windows(X_raw,ts)
+	X_trials = pe.X_windows(X_raw,trial_wins)
 	##now do the smoothing, if requested
 	if smooth_method != 'none':
 		for t in range(len(X_trials)):
 			X_trials[t] = pe.smooth_spikes(X_trials[t],smooth_method,smooth_width)
 	##now, do timestretching, if requested
 	if timestretch:
-		pass
-"""
-#####################################################################
-###########TODO##############
-##need to decide when and how to do smoothing. Interpolation will probably work better
-on smoothed data, but if I smooth the full session data including binning, then the trial
-timestamps lose some accuracy and taking the data windows will result in some jitter.
-
-"""
+		##first step is to get the proper timestamps.
+		##we want to use the original ts, because they contain actual event times and not trial start/stop
+		##if data is binned, then we need the timestamps in terms of bins
+		if smooth_method == 'bins':
+			ts_rel = ts/smooth_width
+			offset = pad[0]/float(smooth_width)
+		elif smooth_method == 'both':
+			ts_rel = ts/smooth_width[1]
+			offset = pad[0]/float(smooth_width[1])
+		else: 
+			ts_rel = ts
+			offset = pad[0]
+		##now get the timstamps in relation to the start of each trial
+		ts_rel[:,1] = ts_rel[:,1]-ts_rel[:,0]
+		##now account for padding
+		ts_rel[:,0] = offset
+		ts_rel[:,1] = ts_rel[:,1]+offset
+		##get as integer
+		ts_rel = ts_rel.astype(int)
+		##now run the data through the function
+		X_trials = stretch_trials(X_trials,ts_rel)
 	##now z-score, if requested
 	if z_score:
-		for a in range(len(X_trials)):
-			X_trials[a] = zscore(X_trials[a])
-	return X_trials
+		##ideally, we want to get the zscore value for each neuron across all trials. To do this,
+		##first we need to concatenate all trial data for each neuron
+		##make a data array to remember the length of each trial
+		trial_lens = np.zeros(len(X_trials))
+		for i in range(len(X_trials)):
+			trial_lens[i] = X_trials[i].shape[1]
+		trial_lens = trial_lens.astype(int)
+		##now concatenate all trials
+		X_trials = np.concatenate(X_trials,axis=1)
+		##now zscore each neuron's activity across all trials
+		for n in range(X_trials.shape[0]):
+			X_trials[n,:] = zscore(X_trials[n,:])
+		##finally, we want to put everything back in it's place
+		if np.all(trial_lens==trial_lens[0]): ##case where all trials are same length (probably timestretch==True)
+			X_result = np.zeros((trial_lens.shape[0],X_trials.shape[0],trial_lens[0]))
+			for i in range(trial_lens.shape[0]):
+				X_result[i,:,:] = X_trials[:,i*trial_lens[i]:(i+1)*trial_lens[i]]
+			X_trials = X_result
+		else:
+			print "different trial lengths detected; parsing as list"
+			X_result = []
+			c = 0
+			for i in range(trial_lens.shape[0]):
+				X_result.append(X_trials[:,c:c+trial_lens[i]])
+				c+=trial_lens[i]
+			X_trials = X_result
+	return X_trials, ts_idx
 
 
 
@@ -378,7 +418,8 @@ def stretch_trials(X_trials,ts):
 				y = trial_data[n,epoch_ts[t,0]:epoch_ts[t,1]]
 				x = np.arange(y.shape[0])
 				##create an interpolation object for these data
-				f = interpolate.interp1d(x,y,bounds_error=False,fill_value='extrapolate')
+				f = interpolate.interp1d(x,y,bounds_error=False,fill_value='extrapolate',
+					kind='linear')
 				##now use this function to interpolate the data into the 
 				##correct size
 				ynew = f(xnew)
@@ -393,18 +434,18 @@ def stretch_trials(X_trials,ts):
 	if not np.all(t_diff<=1):
 		##make sure padding is equal for all trials
 		if np.all(t_diff==t_diff[0]):
-			pad2 = tdiff[0]
+			pad2 = t_diff[0]
 			data = np.zeros((n_trials,n_neurons,pad2))
 			for t in range(n_trials):
 				data[t,:,:] = X_trials[t][:,-pad2:]
 			pieces.append(data)
 		else:
 			print "Last event has uneven padding"
-			pad2 = np.floor(tdiff[0]).astype(int)
+			pad2 = np.floor(t_diff[0]).astype(int)
 			data = np.zeros((n_trials,n_neurons,pad2))
 			for t in range(n_trials):
 				data[t,:,:] = X_trials[t][:,-pad2:]
-				pieces.append(data)
+			pieces.append(data)
 	##finally, concatenate everything together!
 	X = np.concatenate(pieces,axis=2)
 	return X
@@ -424,3 +465,11 @@ def align_ts(ts):
 	for i in range(1,ts.shape[1]):
 		ts_rel[:,i] = ts[:,i]-ts[:,0]
 	return ts_rel
+
+
+
+
+
+
+
+
