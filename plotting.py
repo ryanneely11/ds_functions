@@ -9,12 +9,279 @@ import parse_logs as pl
 import parse_ephys as pe
 import parse_timestamps as pt
 import parse_trials as ptr
+import full_analyses as fa
 import h5py
 import scipy.stats
 import scipy as sp
 import session_analysis as sa
 import matplotlib as ml
 import dpca
+from scipy import stats
+
+"""
+A function to plot performance (correct press/all presses)
+for all animals across sessions.
+"""
+def plot_performance_all(save=False):
+	##Start by getting the data
+	data = fa.get_p_correct()
+	##add a break in the data to acocunt for surgeries
+	surgery_break = np.zeros((data.shape[0],4))
+	surgery_break[:] = np.nan
+	pre_surgery = data[:,0:8]
+	post_surgery = data[:,8:]
+	data = np.concatenate((pre_surgery,surgery_break,post_surgery),axis=1)
+	##get the mean and std error
+	mean = np.nanmean(data,axis=0)
+	err = np.nanstd(data,axis=0)/np.sqrt(data.shape[0])
+	##the x-axis
+	x = np.arange(1,data.shape[1]+1)
+	##set up the plot
+	fig,(ax,ax2) = plt.subplots(nrows=1,ncols=2,sharey=True)
+	ax.errorbar(x,mean,linewidth=2,color='k',yerr=err,capthick=2)
+	##also plot animals individually
+	for i in range(data.shape[0]):
+		ax.plot(x,data[i,:],color='b',linewidth=2,alpha=0.5)
+	for tick in ax.xaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	for tick in ax.yaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	ax.set_xlabel("Training day",fontsize=14)
+	ax.set_ylabel("Percent correct",fontsize=14)
+	ax.set_title("Performance over days",fontsize=14)
+	ax.text(8,ax.get_ylim()[0]+0.05,"Implant\nsurgery",fontsize=14,color='r')
+	ax.plot(np.arange(8,13),np.ones(5)*ax.get_ylim()[0]+0.02,linewidth=4,color='r')
+	##now compare first 3 and last 3 days
+	first3 = data[:,0:4].mean(axis=1)
+	last3 = data[:,-7:-3].mean(axis=1) ##I think one animal didn't do as many days
+	means = np.array([first3.mean(),last3.mean()])
+	sems = np.array([stats.sem(first3),stats.sem(last3)])
+	##
+	x = np.array([1,2])
+	xerr = np.ones(2)*0.1
+	for i in range(first3.size):
+		ax2.plot(x[0],first3[i],color='cyan',linewidth=2,marker='o',alpha=0.5)
+		ax2.plot(x[1],last3[i],color='blue',linewidth=2,marker='o',alpha=0.5)
+	ax2.errorbar(x,means,yerr=sems,xerr=xerr,fmt='none',ecolor='k',capthick=2,elinewidth=2)
+	plt.xticks(x,['first 4','last 4'])
+	for ticklabel in ax2.get_xticklabels():
+		ticklabel.set_fontsize(14)
+	for ticklabel in ax2.get_yticklabels():
+		ticklabel.set_fontsize(14)
+	# ax2.set_ylabel("Percent correct",fontsize=14)
+	ax2.set_xlabel("Training day",fontsize=14)
+	ax2.set_title("Comparison eary-late",fontsize=14)
+	tval,pval = stats.ttest_rel(first3,last3)
+	ax2.text(1.5,0.82,"p={0:.4f}".format(pval))
+	print("mean first 4="+str(first3.mean()))
+	print("mean last 4="+str(last3.mean()))
+	print("pval="+str(pval))
+	print("tval="+str(tval))
+	plt.tight_layout()
+	if save:
+		fig.savefig("/Volumes/Untitled/Ryan/DS_animals/plots/performance.png")
+		fig.savefig("/Volumes/Untitled/Ryan/DS_animals/plots/performance.svg")
+
+
+
+
+
+"""
+A function to plot performance after switches (correct press/all presses),
+as defined by the number of trials to reach criterion, for all animals across sessions.
+Inputs:
+	crit_trials: the number of trials to average over to determine performance
+	crit_level: the criterion performance level to use
+	exclude_first: whether to exclude the first block, but only if there is more than one block.
+"""
+def plot_switch_performance_all(crit_trials=5,crit_level=0.8,exclude_first=False,
+	save=False):
+	##Start by getting the data
+	data = fa.get_criterion(crit_trials=crit_trials,
+				crit_level=crit_level,exclude_first=exclude_first)
+	##add a break in the data to acocunt for surgeries
+	surgery_break = np.zeros((data.shape[0],4))
+	surgery_break[:] = np.nan
+	pre_surgery = data[:,0:8]
+	post_surgery = data[:,8:]
+	data = np.concatenate((pre_surgery,surgery_break,post_surgery),axis=1)
+	##get the mean and std error
+	mean = np.nanmean(data,axis=0)
+	err = np.nanstd(data,axis=0)/np.sqrt(data.shape[0])
+	##the x-axis
+	x = np.arange(1,data.shape[1]+1)
+	##set up the plot
+	fig,(ax,ax2) = plt.subplots(nrows=1,ncols=2,sharey=True)
+	ax.errorbar(x,mean,linewidth=2,color='k',yerr=err,capthick=2)
+	##also plot animals individually
+	for i in range(data.shape[0]):
+		ax.plot(x,data[i,:],color='g',linewidth=2,alpha=0.5)
+	for tick in ax.xaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	for tick in ax.yaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	ax.set_xlabel("Training day",fontsize=14)
+	ax.set_ylabel("Trials",fontsize=14)
+	ax.set_title("Trials to reach criteria ("+str(crit_level)+")\n after switch",fontsize=14)
+	ax.text(8,ax.get_ylim()[0]+2,"Implant\nsurgery",fontsize=14,color='r')
+	ax.plot(np.arange(8,13),np.ones(5)*ax.get_ylim()[0]+0.02,linewidth=4,color='r')
+	##now compare first 3 and last 3 days
+	first3 = data[:,0:4].mean(axis=1)
+	last3 = data[:,-7:-3].mean(axis=1) ##I think one animal didn't do as many days
+	means = np.array([first3.mean(),last3.mean()])
+	sems = np.array([stats.sem(first3),stats.sem(last3)])
+	##
+	x = np.array([1,2])
+	xerr = np.ones(2)*0.1
+	for i in range(first3.size):
+		ax2.plot(x[0],first3[i],color='lightgreen',linewidth=2,marker='o',alpha=0.5)
+		ax2.plot(x[1],last3[i],color='green',linewidth=2,marker='o',alpha=0.5)
+	ax2.errorbar(x,means,yerr=sems,xerr=xerr,fmt='none',ecolor='k',capthick=2,elinewidth=2)
+	plt.xticks(x,['first 4','last 4'])
+	for ticklabel in ax2.get_xticklabels():
+		ticklabel.set_fontsize(14)
+	for ticklabel in ax2.get_yticklabels():
+		ticklabel.set_fontsize(14)
+	# ax2.set_ylabel("Number of trials",fontsize=14)
+	ax2.set_xlabel("Training day",fontsize=14)
+	ax2.set_title("Comparison eary-late",fontsize=14)
+	tval,pval = stats.ttest_rel(first3,last3)
+	ax2.text(1.5,42,"p={0:.4f}".format(pval))
+	print("mean first 4="+str(first3.mean()))
+	print("mean last 4="+str(last3.mean()))
+	print("pval="+str(pval))
+	print("tval="+str(tval))
+	plt.tight_layout()
+	if save:
+		fig.savefig("/Volumes/Untitled/Ryan/DS_animals/plots/switch_performance.png")
+		fig.savefig("/Volumes/Untitled/Ryan/DS_animals/plots/switch_performance.svg")
+
+"""
+A function to plot volatility
+for all animals across sessions.
+"""
+def plot_volatility_all(save=False):
+	##Start by getting the data
+	data = fa.get_volatility()
+	##add a break in the data to acocunt for surgeries
+	surgery_break = np.zeros((data.shape[0],4))
+	surgery_break[:] = np.nan
+	pre_surgery = data[:,0:8]
+	post_surgery = data[:,8:]
+	data = np.concatenate((pre_surgery,surgery_break,post_surgery),axis=1)
+	##get the mean and std error
+	mean = np.nanmean(data,axis=0)
+	err = np.nanstd(data,axis=0)/np.sqrt(data.shape[0])
+	##the x-axis
+	x = np.arange(1,data.shape[1]+1)
+	##set up the plot
+	fig,(ax,ax2) = plt.subplots(nrows=1,ncols=2,sharey=True)
+	ax.errorbar(x,mean,linewidth=2,color='k',yerr=err,capthick=2)
+	##also plot animals individually
+	for i in range(data.shape[0]):
+		ax.plot(x,data[i,:],color='purple',linewidth=2,alpha=0.5)
+	for tick in ax.xaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	for tick in ax.yaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	ax.set_xlabel("Training day",fontsize=14)
+	ax.set_ylabel("Percent of switches",fontsize=14)
+	ax.set_title("Volatility after unrewarded trials",fontsize=14)
+	ax.text(8,ax.get_ylim()[0]+0.05,"Implant\nsurgery",fontsize=14,color='r')
+	ax.plot(np.arange(8,13),np.ones(5)*ax.get_ylim()[0]+0.02,linewidth=4,color='r')
+	##now compare first 3 and last 3 days
+	first3 = data[:,0:4].mean(axis=1)
+	last3 = data[:,-7:-3].mean(axis=1) ##I think one animal didn't do as many days
+	means = np.array([first3.mean(),last3.mean()])
+	sems = np.array([stats.sem(first3),stats.sem(last3)])
+	#####
+	x = np.array([1,2])
+	xerr = np.ones(2)*0.1
+	for i in range(first3.size):
+		ax2.plot(x[0],first3[i],color='plum',linewidth=2,marker='o',alpha=0.5)
+		ax2.plot(x[1],last3[i],color='purple',linewidth=2,marker='o',alpha=0.5)
+	ax2.errorbar(x,means,yerr=sems,xerr=xerr,fmt='none',ecolor='k',capthick=2,elinewidth=2)
+	plt.xticks(x,['first 4','last 4'])
+	for ticklabel in ax2.get_xticklabels():
+		ticklabel.set_fontsize(14)
+	for ticklabel in ax2.get_yticklabels():
+		ticklabel.set_fontsize(14)
+	ax2.set_xlabel("Training day",fontsize=14)
+	ax2.set_title("Comparison eary-late",fontsize=14)
+	tval,pval = stats.ttest_rel(first3,last3)
+	ax2.text(1.5,0.42,"p={0:.4f}".format(pval))
+	print("mean first 4="+str(first3.mean()))
+	print("mean last 4="+str(last3.mean()))
+	print("pval="+str(pval))
+	print("tval="+str(tval))
+	plt.tight_layout()
+	if save:
+		fig.savefig("/Volumes/Untitled/Ryan/DS_animals/plots/volatility.png")
+		fig.savefig("/Volumes/Untitled/Ryan/DS_animals/plots/volatility.svg")
+
+"""
+A function to plot persistence
+for all animals across sessions.
+"""
+def plot_persistence_all(save=False):
+	##Start by getting the data
+	data = fa.get_persistence()
+	##add a break in the data to acocunt for surgeries
+	surgery_break = np.zeros((data.shape[0],4))
+	surgery_break[:] = np.nan
+	pre_surgery = data[:,0:8]
+	post_surgery = data[:,8:]
+	data = np.concatenate((pre_surgery,surgery_break,post_surgery),axis=1)
+	##get the mean and std error
+	mean = np.nanmean(data,axis=0)
+	err = np.nanstd(data,axis=0)/np.sqrt(data.shape[0])
+	##the x-axis
+	x = np.arange(1,data.shape[1]+1)
+	##set up the plot
+	fig,(ax,ax2) = plt.subplots(nrows=1,ncols=2,sharey=True)
+	ax.errorbar(x,mean,linewidth=2,color='k',yerr=err,capthick=2)
+	##also plot animals individually
+	for i in range(data.shape[0]):
+		ax.plot(x,data[i,:],color='orange',linewidth=2,alpha=0.5)
+	for tick in ax.xaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	for tick in ax.yaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	ax.set_xlabel("Training day",fontsize=14)
+	ax.set_ylabel("Persistence score",fontsize=14)
+	ax.set_title("Persistence after rewarded trials",fontsize=14)
+	ax.text(8,ax.get_ylim()[0]+0.05,"Implant\nsurgery",fontsize=14,color='r')
+	ax.plot(np.arange(8,13),np.ones(5)*ax.get_ylim()[0]+0.02,linewidth=4,color='r')
+	##now compare first 3 and last 3 days
+	first3 = data[:,0:4].mean(axis=1)
+	last3 = data[:,-7:-3].mean(axis=1) ##I think one animal didn't do as many days
+	means = np.array([first3.mean(),last3.mean()])
+	sems = np.array([stats.sem(first3),stats.sem(last3)])
+	##
+	x = np.array([1,2])
+	xerr = np.ones(2)*0.1
+	for i in range(first3.size):
+		ax2.plot(x[0],first3[i],color='orange',linewidth=2,marker='o',alpha=0.5)
+		ax2.plot(x[1],last3[i],color='darkorange',linewidth=2,marker='o',alpha=0.7)
+	ax2.errorbar(x,means,yerr=sems,xerr=xerr,fmt='none',ecolor='k',capthick=2,elinewidth=2)
+	plt.xticks(x,['first 4','last 4'])
+	for ticklabel in ax2.get_xticklabels():
+		ticklabel.set_fontsize(14)
+	for ticklabel in ax2.get_yticklabels():
+		ticklabel.set_fontsize(14)
+	ax2.set_xlabel("Training day",fontsize=14)
+	ax2.set_title("Comparison eary-late",fontsize=14)
+	tval,pval = stats.ttest_rel(first3,last3)
+	ax2.text(1.5,4,"p={0:.4f}".format(pval))
+	print("mean first 4="+str(first3.mean()))
+	print("mean last 4="+str(last3.mean()))
+	print("pval="+str(pval))
+	print("tval="+str(tval))
+	plt.tight_layout()
+	if save:
+		fig.savefig("/Volumes/Untitled/Ryan/DS_animals/plots/persistence.png")
+		fig.savefig("/Volumes/Untitled/Ryan/DS_animals/plots/persistence.svg")
+
 
 """
 A function to plot the significance of the regression. Same as the above function but
@@ -385,6 +652,72 @@ def plot_presses(f_in, sigma = 5):
 		tick.label.set_fontsize(14)
 	ax2.set_title("top only", fontsize = 14)
 	ax3.set_title("bottom only", fontsize = 14)
+
+"""
+A function to plot the lever presses in a slightly different way, 
+with a little more detail about presses and correct/reward values.
+This plotting function uses a results dictionary from the function
+pt.get_event_data, which will parse a behavioral timestamps file into 
+the appropriate format.
+Inputs:
+	f_behavior: a hdf5 file path to where the raw behavior data is stored.
+"""
+def plot_trial(f_behavior):
+	results = pt.get_event_data(f_behavior)
+	##we will split this data a little further, into
+	##different catagories.
+	scalex = 1000*60 ##conversion factor from ms to min
+	correct_upper = np.intersect1d(results['upper_lever'],results['correct_lever'])
+	correct_lower = np.intersect1d(results['lower_lever'],results['correct_lever'])
+	incorrect_upper = np.intersect1d(results['upper_lever'],results['incorrect_lever'])
+	incorrect_lower = np.intersect1d(results['lower_lever'],results['incorrect_lever'])
+	##now grab the correct, but unrewarded levers for each lever type
+	corr_unrew_upper = np.intersect1d(correct_upper,results['unrewarded_lever'])
+	corr_unrew_lower = np.intersect1d(correct_lower,results['unrewarded_lever'])
+	##finally, remove these indices from the correct arrays
+	correct_upper = np.setdiff1d(np.union1d(correct_upper, corr_unrew_upper), 
+		np.intersect1d(correct_upper, corr_unrew_upper))
+	correct_lower = np.setdiff1d(np.union1d(correct_lower, corr_unrew_lower), 
+		np.intersect1d(correct_lower, corr_unrew_lower))
+	correct_lower = correct_lower/scalex
+	correct_upper = correct_upper/scalex
+	incorrect_upper = incorrect_upper/scalex
+	incorrect_lower = incorrect_lower/scalex
+	corr_unrew_upper = corr_unrew_upper/scalex
+	corr_unrew_lower = corr_unrew_lower/scalex
+	##create the plot
+	fig, ax = plt.subplots(1)
+	ax.set_xlim(-1,results['session_length']/scalex)
+	##mark the rule changes
+	ax.vlines(results['upper_rewarded']/scalex, 0.5, 2.5, colors = 'r', linestyles = 'dashed', 
+		linewidth = '2', alpha = 0.5)
+	ax.vlines(results['lower_rewarded']/scalex, 0.5, 2.5, colors = 'b', linestyles = 'dashed', 
+		linewidth = '2', alpha =0.5)
+	##now plot the presses
+	ax.plot(correct_upper,np.ones(correct_upper.size)*2+np.random.uniform(-0.2,0.2,size=correct_upper.size),
+		linestyle='none',marker='o',color='r',label='correct upper')
+	ax.plot(correct_lower,np.ones(correct_lower.size)+np.random.uniform(-0.2,0.2,size=correct_lower.size),
+		linestyle='none',marker='o',color='b',label='correct lower')
+	ax.plot(incorrect_upper,np.ones(incorrect_upper.size)*2+np.random.uniform(-0.2,0.2,size=incorrect_upper.size),
+		linestyle='none',marker='x',color='r',label='incorrect upper')
+	ax.plot(incorrect_lower,np.ones(incorrect_lower.size)+np.random.uniform(-0.2,0.2,size=incorrect_lower.size),
+		linestyle='none',marker='x',color='b',label='incorrect lower')
+	ax.plot(corr_unrew_upper,np.ones(corr_unrew_upper.size)*1.7+np.random.uniform(-0.2,0.2,size=corr_unrew_upper.size),
+		linestyle='none',marker='o',color='r',markerfacecolor='none',label='correct unrewarded upper')
+	ax.plot(corr_unrew_lower,np.ones(corr_unrew_lower.size)*1.3+np.random.uniform(-0.2,0.2,size=corr_unrew_lower.size),
+		linestyle='none',marker='o',color='b',markerfacecolor='none',label='correct unrewarded lower')
+	ax.set_xlabel("Time in session, mins",fontsize=14)
+	ax.set_yticks([1,2])
+	ax.set_yticklabels(['Lower\npress','Upper\npress'])
+	for tick in ax.xaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	for tick in ax.yaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	ax.set_title("Session "+f_behavior[-11:-5],fontsize=14)
+	ax.legend(bbox_to_anchor=(1,1))
+
+
+
 
 """
 Plots a sample of the raw data matrix, X.
@@ -977,7 +1310,7 @@ Inputs:
 	Z: transformed spike matrix (output from dpca.session_dpca)
 	time: time axis (output from dpca.session_dpca)
 """
-def plot_dpca_results(Z,time,sig_masks,var_explained,n_components=3):
+def plot_dpca_results(Z,time,sig_masks,var_explained,events,n_components=3):
 	##get the condition LUT dictionary from the dpca module
 	LUT = dpca.condition_LUT
 	##set up the figure
@@ -989,23 +1322,56 @@ def plot_dpca_results(Z,time,sig_masks,var_explained,n_components=3):
 		title = LUT[condition]
 		data = Z[condition]
 		for p in range(n_components):
-			plotnum = (c*n_conditions)+(p+1)
-			print plotnum
+			plotnum = (c*n_components+p)+1
 			ax = fig.add_subplot(n_conditions,n_components,plotnum)
 			ax.plot(time,data[p,0,0,:],color='r',linewidth=2,label='Upper lever, correct')
 			ax.plot(time,data[p,1,1,:],color='b',linewidth=2,label='Lower lever, correct')
-			ax.plot(time,data[p,0,1,:],color='r',linewidth=2,label='Lower lever, incorrect')
-			ax.plot(time,data[p,1,0,:],color='r',linewidth=2,label='Upper lever, incorrect')
+			ax.plot(time,data[p,0,1,:],color='b',linewidth=2,label='Lower lever, incorrect',
+				linestyle='dashed')
+			ax.plot(time,data[p,1,0,:],color='r',linewidth=2,label='Upper lever, incorrect',
+				linestyle='dashed')
+			##now get the significance masks (unless there isn't one)
+			try:
+				mask = sig_masks[condition][p]
+				sigx = np.where(mask==True)[0]
+				sigy = np.ones(sigx.size)*ax.get_ylim()[0]
+				ax.plot(sigx,sigy,color='k',linewidth=2)
+			except KeyError:
+				pass
+			##now plot the lines corresponding to the events
+			plt.vlines(events,ax.get_ylim()[0],ax.get_ylim()[1],linestyle='dashed',
+				color='k',alpha=0.5)	
 			if c+1 == n_conditions:
 				ax.set_xlabel('Time in trial, ms',fontsize=14)
 				for tick in ax.xaxis.get_major_ticks():
 					tick.label.set_fontsize(14)
+				ax.locator_params(axis='x',tight=True,nbins=4)
 			else: 
 				ax.set_xticklabels([])
 			if p == 0:
 				ax.set_ylabel(title,fontsize=14)
+			for tick in ax.yaxis.get_major_ticks():
+				tick.label.set_fontsize(14)
+			ax.locator_params(axis='y',tight=True,nbins=4)
 			if c == 0:
 				ax.set_title("Component "+str(p),fontsize=14)
+	##now do a second plot that shows the variance explained by the combination
+	##of all components
+	fig,ax = plt.subplots(1)
+	all_var = []
+	for v in var_explained.keys():
+		all_var.append(var_explained[v])
+	all_var = np.cumsum(np.asarray(all_var).sum(axis=0)*100)
+	ax.plot(np.arange(1,all_var.size+1),all_var,linewidth=2,marker='o')
+	ax.set_ylabel("percent variance explained",fontsize=14)
+	ax.set_ylabel("Number of components",fontsize=14)
+	ax.set_title("Variance explained by dPCA",fontsize=14)
+	for tick in ax.xaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	for tick in ax.yaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	ax.set_xlim(0,all_var.size+2)
+	ax.set_ylim(0,100)
 	plt.show()
 
 """

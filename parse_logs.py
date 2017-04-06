@@ -54,7 +54,7 @@ def parse_log(f_in):
 		elif label == "unrewarded_poke":
 			results['unrewarded_poke'].append(float(timestamp))
 		else:
-			print "unknown label: " + label
+			print("unknown label: " + label)
 		##go to the next line
 		label, timestamp = read_line(f.readline())
 	f.close()
@@ -95,13 +95,13 @@ def batch_log_to_h5(directory):
 		##save it as an hdf5 file with the same name
 		new_path = os.path.splitext(log)[0]+'.hdf5'
 		dict_to_h5(result, new_path)
-	print 'Save complete!'
+	print('Save complete!')
 
 ##offsets all timestamps in a log by a given value
 ##in a h5 file like the one produced by the above function
 def offset_log_ts(h5_file, offset):
 	f = h5py.File(h5_file, 'r+')
-	for key in f.keys():
+	for key in list(f):
 		new_data = np.asarray(f[key])+offset
 		f[key][:] = new_data
 	f.close()

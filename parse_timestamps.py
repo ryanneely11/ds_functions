@@ -4,6 +4,137 @@ import h5py
 import numpy as np
 
 """
+This is a function to look at session data a different way.
+Probably rats don't understand the trial structure, so this
+splits things up by event types. It's not hugely different than the
+other sorting methods, but it includes a bit more data this way and
+doesnt't try to shoehorn things into a trial structure.
+Inputs:
+	f_behavior: an hdf5 file with the raw behavioral data
+Returns:
+	results: a dictionary with timestamps split into catagories, 
+		and converted into ms.
+"""
+def get_event_data(f_behavior):
+	##first, mix all of the data we care about together into two arrays, 
+	##one with timstamps and the other with timestamp ids.
+	##for now, we don't care about the following timestamps:
+	f = h5py.File(f_behavior,'r')
+	exclude = ['session_length','reward_primed','reward_idle',
+	'trial_start','bottom_rewarded','top_rewarded']
+	event_ids = [x for x in list(f) if x not in exclude]
+	##let's also store info about trial epochs
+	upper_rewarded = np.asarray(f['top_rewarded'])
+	lower_rewarded = np.asarray(f['bottom_rewarded'])
+	session_length = np.floor(np.asarray(f['session_length'])*1000.0).astype(int)
+	f.close()
+	ts,ts_ids = mixed_events(f_behavior,event_ids)
+	##now we can do a little cleanup of the events. 
+	##to remove duplicate nose pokes:
+	ts,ts_ids = remove_duplicate_pokes(ts,ts_ids)
+	##to remove accidental lever presses
+	ts,ts_ids = remove_lever_accidents(ts,ts_ids)
+	##now get the ranges of the different block times
+	##****This section is super confusing, but it works so...***
+	block_times = get_block_times(lower_rewarded,upper_rewarded,session_length)
+	try:
+		upper_rewarded = np.floor(np.asarray(block_times['upper'])[:,0]*1000.0).astype(int)
+	except KeyError:
+		upper_rewarded = np.array([])
+	try:
+		lower_rewarded = np.floor(np.asarray(block_times['lower'])[:,0]*1000.0).astype(int)
+	except KeyError:
+		lower_rewarded = np.array([])
+	block_times = get_block_times(lower_rewarded,upper_rewarded,session_length) ##now it's in ms
+	##finally, we can parse these into different catagories of events
+	upper_lever = [] ##all upper lever presses
+	lower_lever = [] ##all lower presses
+	rewarded_lever = [] ##all presses followed by a rewarded poke
+	unrewarded_lever = [] ##all presses followed by an unrewarded poke
+	rewarded_poke = []
+	unrewarded_poke = []
+	correct_lever = [] ##any press that was correct for the context
+	incorrect_lever = []
+	correct_poke = [] ##pokes that happened after correct levers
+	incorrect_poke = [] ##pokes that happened after incorrect levers
+	##run through the events and parse into the correct place
+	actions = ['top_lever','bottom_lever']
+	outcomes = ['rewarded_poke','unrewarded_poke']
+	##start us off...
+	last_event = ts_ids[0]
+	for i in range(ts_ids.size-1):
+		current_event = ts_ids[i+1]
+		##need to consider all cases
+		if last_event in actions: ##case where the preceeding event was a lever press
+			##first consider what type of press
+			if last_event == 'top_lever':
+				upper_lever.append(ts[i])
+			elif last_event == 'bottom_lever':
+				lower_lever.append(ts[i])
+			else:
+				print("Error: unknown action type")
+				break
+			##now we need to consider if this was a correct press or not
+			if (last_event=='top_lever' and which_block(block_times,
+				ts[i])=='upper_rewarded') or (last_event=='bottom_lever' and 
+				which_block(block_times,ts[i])=='lower_rewarded'):
+				correct_lever.append(ts[i])
+			elif (last_event=='top_lever' and which_block(block_times,
+				ts[i])=='lower_rewarded') or (last_event=='bottom_lever' and 
+				which_block(block_times,ts[i])=='upper_rewarded'):
+				incorrect_lever.append(ts[i])
+			else:
+				print("Error: lever press neither correct or incorrect")
+				break
+			##Now we need to figure out if this was a rewarded action or not
+			if current_event == 'rewarded_poke':
+				rewarded_lever.append(ts[i])
+			elif current_event == 'unrewarded_poke':
+				unrewarded_lever.append(ts[i])
+			##it's possible the next event was a lever press so we won't catch an exception
+			last_event = current_event
+		elif last_event in outcomes:
+			if last_event == 'rewarded_poke':
+				rewarded_poke.append(ts[i])
+			elif last_event == 'unrewarded_poke':
+				unrewarded_poke.append(ts[i])
+			else:
+				print("Error: unknown poke type")
+				break
+			##now decide if this was a correct poke, event if unrewarded
+			if (ts_ids[i-1]=='top_lever' and which_block(block_times,
+				ts[i-1])=='upper_rewarded') or (ts_ids[i-1]=='bottom_lever' and 
+				which_block(block_times,ts[i-1])=='lower_rewarded'):
+				correct_poke.append(ts[i])
+			elif (ts_ids[i-1]=='top_lever' and which_block(block_times,
+				ts[i-1])=='lower_rewarded') or (ts_ids[i-1]=='bottom_lever' and 
+				which_block(block_times,ts[i-1])=='upper_rewarded'):
+				incorrect_poke.append(ts[i])
+			last_event = current_event
+		else:
+			print("Error: unknown event type")
+			break
+	##create a dictionary of this data
+	results = {
+	'upper_lever':np.asarray(upper_lever),
+	'lower_lever':np.asarray(lower_lever),
+	'rewarded_lever':np.asarray(rewarded_lever),
+	'unrewarded_lever':np.asarray(unrewarded_lever),
+	'correct_lever':np.asarray(correct_lever),
+	'incorrect_lever':np.asarray(incorrect_lever),
+	'rewarded_poke':np.asarray(rewarded_poke),
+	'unrewarded_poke':np.asarray(unrewarded_poke),
+	'correct_poke':np.asarray(correct_poke),
+	'incorrect_poke':np.asarray(incorrect_poke),
+	'upper_rewarded':upper_rewarded,
+	'lower_rewarded':lower_rewarded,
+	'session_length':session_length
+	}
+	return results
+
+
+
+"""
 A function that takes in a behavior timestamps file (HDF5)
 and returns an array of timestamps, as well as an index
 of what catagory each trial falls into (ie rewarded, unrewarded, 
@@ -22,7 +153,7 @@ def get_trial_data(f_in,remove_unrew=False):
 	##sort_by_trial does most of the work:
 	block_data = sort_by_trial(f_in,remove_unrew=remove_unrew)
 	##now just parse the TS a little further
-	block_types = block_data.keys() ##keep the block order (upper_rewarded, etc consistent)
+	block_types = list(block_data) ##keep the block order (upper_rewarded, etc consistent)
 	##make sure we only have 2 block types (excpected)
 	assert len(block_types) == 2
 	##concatenate the data from both block types
@@ -45,6 +176,9 @@ def get_trial_data(f_in,remove_unrew=False):
 	ts_idx['rewarded'] = np.where(ts[:,1]>0)[0]
 	##now we can get rid of the negative ts values:
 	ts = abs(ts)
+	##let's perform a check to see if any of the timestamps don't make sense
+	if np.any(ts[:,1]-ts[:,0]<0):
+		print("Warning: detected at least 1 timestamp out of order. Check source file...")
 	##return the results:
 	return ts,ts_idx
 
@@ -169,7 +303,7 @@ def sort_block(block_data,trial_max=5):
 				action = -1*lower_presses.min()
 			else:
 				##error case
-				print "something wrong in upper/lower comparison"
+				print("something wrong in upper/lower comparison")
 				break
 		#case 2: only upper lever was pressed
 		elif upper_idx.size>0 and lower_idx.size==0:
@@ -179,7 +313,7 @@ def sort_block(block_data,trial_max=5):
 			action = -1*block_data['lower_lever'][lower_idx].min()
 		##case 4: something is wrong!
 		else:
-			print "Error- no action for this trial??"
+			print("Error- no action for this trial??")
 			break
 		
 		##***OUTCOMES***
@@ -199,10 +333,10 @@ def sort_block(block_data,trial_max=5):
 				unrewarded_pokes = block_data['unrewarded_poke'][unreward_idx]
 				outcome = -1*unrewarded_pokes.min()
 			else:
-				print "Error: no pokes for this trial"
+				print("Error: no pokes for this trial")
 				break
 		else:
-			print "error: too many rewarded pokes for this trial"
+			print("error: too many rewarded pokes for this trial")
 			break
 
 		##now add the data to the results
@@ -213,7 +347,7 @@ def sort_block(block_data,trial_max=5):
 	t = 0
 	while t < result.shape[0]:
 		if (abs(result[t,2])-abs(result[t,1])) >= trial_max:
-			print "removing trial of length "+str(abs(result[t,2])-abs(result[t,1]))
+			print("removing trial of length "+str(abs(result[t,2])-abs(result[t,1])))
 			result = np.delete(result,t,axis=0)
 		else:
 			t+=1
@@ -249,6 +383,7 @@ def get_block_times(lower_rewarded, upper_rewarded,session_end,min_length=5*60):
 	block_id = np.asarray(block_id)[idx]
 	result = {}
 	##fill the dictionary
+	spurious = 0
 	for b in range(block_starts.size):
 		##range is from the start of the current block
 		##to the start of the second block, or the end of the session.
@@ -266,7 +401,9 @@ def get_block_times(lower_rewarded, upper_rewarded,session_end,min_length=5*60):
 			except KeyError:
 				result[block_id[b]] = [rng]
 		else:
-			print "Block length only "+str(stop-start)+" secs; excluding"
+			spurious +=1
+	if spurious > 0:
+		print("Cleaned "+str(spurious)+" spurious block switches")
 	return result
 
 
@@ -282,7 +419,7 @@ Outputs:
 """
 def get_block_data(block_edges,data_dict):
 	result = {} #dict to return
-	keys = data_dict.keys()
+	keys = list(data_dict)
 	for key in keys:
 		data = data_dict[key]
 		idx = np.nonzero(np.logical_and(data>block_edges[0],data<=block_edges[1]))[0]
@@ -338,3 +475,176 @@ def remove_correct_unrewarded(block_ts,block_type):
 	##get a new array with only these trials
 	clean_ts = block_ts[clean_idx,:]
 	return clean_ts
+
+"""
+A helper function that gets removes spurius unrewarded pokes from a pair of data arrays
+(matched timestamps and timestamp IDs). Rats can trigger multiple unrewarded pokes
+one after the other by licking in the water port. We want to only consider a series of
+unrewarded pokes as a single unrewarded poke. 
+Inputs:
+	ts: 1-d numpy array of timestamps
+	ts_ids: 1-d numpy array of matched timestamp ids
+Returns:
+	Duplicate arrays with timestamp and timestamp IDs of consecutive unrewarded
+	pokes removed. 
+"""
+def remove_duplicate_pokes(ts,ts_ids):
+	##define the kind of events that we are interested in
+	poke_types = ['rewarded_poke','unrewarded_poke']
+	##keep a running list of indices where we have spurious pokes
+	to_remove = []
+	##run through the list and remove duplicate pokes
+	i = 0
+	last_event = 'none'
+	while i < ts.size:
+		this_event = ts_ids[i]
+		if this_event in poke_types: ##we only care if this event is a poke
+			if last_event in poke_types: ##case where we have two back to back pokes
+				to_remove.append(i)
+				last_event = this_event
+				i+=1
+			else: ##case where last event was not a poke
+				last_event = this_event
+				i+=1
+		else: ##move onto the next event
+			last_event = this_event
+			i+=1
+	keep = [x for x in range(ts.size) if x not in to_remove]
+	return ts[keep],ts_ids[keep]
+
+"""
+A helper function to remove accidental lever presses. Sometimes, 
+the top lever will be pressed by accident by the headstage cables when the animal
+is trying to press the bottom lever. We can assume this happens when a top and a bottom
+lever press happen within a short time window of each other, and this would only
+happen accidentally for the top lever, so we will get rid of that timestamp.
+Inputs:
+	ts: 1-d numpy array of timestamps (in ms)
+	ts_ids: 1-d numpy array of matched timestamp ids
+	tolerance: the time gap that is allowable betweeen presses to be
+		considered intentional.
+Returns:
+	Duplicate arrays with timestamp and timestamp IDs of putative accidental
+	top lever presses. 
+"""
+def remove_lever_accidents(ts,ts_ids,tolerance=100):
+	##define the ids we are interested in
+	lever_types = ['top_lever','bottom_lever']
+	##keep a list of ids to remove
+	to_remove = []
+	last_event = ts_ids[0]
+	last_timestamp = ts[0]
+	for i in range(1,ts_ids.size):
+		this_event = ts_ids[i]
+		this_timestamp = ts[i]
+		##we only care if this event AND the last event are lever presses
+		if (this_event in lever_types) and (last_event in lever_types):
+			##also check that the lever press types are different
+			if this_event != last_event:
+				##see if this sequence violates our interval tolerance
+				if this_timestamp-last_timestamp <= tolerance:
+					##if all these conditions are met, remove which ever ts is the upper lever
+					if this_event == 'top_lever':
+						to_remove.append(i)
+					elif last_event == 'top_lever':
+						to_remove.append(i-1)
+		last_event = this_event
+	keep = [x for x in range(ts.size) if x not in to_remove]
+	return ts[keep],ts_ids[keep]
+
+
+
+"""
+A helper function to get a sorted and mixed list of events and event ids
+from a behavioral events file.
+Inputs: 
+	f_in: datafile to draw from 
+	event_list: a list of event ids to include in the output arrays
+Returns:
+	ts: a list of timestamps, sorted in ascending order
+	ts_ids: a matcehd list of timestamp ids
+"""
+def mixed_events(f_in,event_list):
+	ts = []
+	ts_ids = []
+	##open the file
+	f = h5py.File(f_in)
+	##add everything to the master lists
+	for event in event_list:
+		data = np.floor((np.asarray(f[event])*1000.0)).astype(int)
+		for i in range(data.size):
+			ts.append(data[i])
+			ts_ids.append(event)
+	f.close()
+	##convert to arrays
+	ts = np.asarray(ts)
+	ts_ids = np.asarray(ts_ids)
+	##now sort in ascending order
+	idx = np.argsort(ts)
+	ts = ts[idx]
+	ts_ids = ts_ids[idx]
+	return ts, ts_ids
+
+
+"""
+Another little helper function to check which block type (upper or lower rewarded)
+a give timestamp falls into.
+Inputs:
+	-result: the output from get_block_times
+	-ts: the timestamp to check for membership
+	***MAKE SURE THEY ARE BOTH ON THE SAME TIMESCALE!***
+returns:
+	-upper_times: an array of timestamps (in ms) where upper lever was rewarded
+	-lower_times: ditto but for lower lever rewarded
+"""
+def which_block(results,ts):
+	block = None
+	for b in list(results):
+		##start with the lower epochs
+		for epoch in results[b]:
+			if ts >= epoch[0] and ts <= epoch[1]:
+				block = b+'_rewarded'
+				break
+	return block
+
+"""
+A helper function to clean an array of block times.
+Sometimes the raspberry pi had a glitch where it would
+record multiple block switches in a row. Since we know that no block
+was ever less than 5 mins, we can exclude get rid of these spurious block switches.
+Inputs:
+	upper_rewarded: an array of putative upper rewarded block switch times
+	lower_rewarded: an array of putative lower rewarded block switch times
+	threshold: shortest allowable block, in s
+Returns: 
+	clean_upper: a copy of the input array with false block switch times removed
+	clean_lower: ditto
+"""
+# def clean_block_times(upper_rewarded,lower_rewarded,threshold=5*60):
+# 	##first clean each set of times separately
+# 	keep_upper = np.concatenate((np.array([0]),np.where(np.diff(upper_rewarded>threshold))[0]+1))
+# 	keep_lower = np.concatenate((np.array([0]),np.where(np.diff(lower_rewarded>threshold))[0]+1))
+# 	upper_rewarded = upper_rewarded[keep_upper]
+# 	lower_rewarded = lower_rewarded[keep_lower]
+# 	##add all the block switch times together, and create an index array
+# 	times = np.concatenate((upper_rewarded,lower_rewarded))
+# 	upper_ids = np.empty(upper_rewarded.size,dtype='object')
+# 	upper_ids[:] = 'upper_rewarded'
+# 	lower_ids = np.empty(lower_rewarded.size,dtype='object')
+# 	lower_ids[:] = 'lower_rewarded'
+# 	ids = np.concatenate((upper_ids,lower_ids))
+# 	##now sort the times and indices
+# 	idx = np.argsort(times)
+# 	times = times[idx]
+# 	ids = ids[idx]
+# 	##indices to keep
+# 	valid_idx = np.where(np.diff(times)>threshold)[0]
+# 	invalid_idx = np.where(np.diff(times)<threshold)[0]
+# 	if invalid_idx.size>0:
+# 		print("Cleaning "+str(len(invalid_idx))+" spurious block switches")
+# 	clean_times = times[valid_idx]
+# 	clean_ids = ids[valid_idx]
+# 	upper_idx = np.where(clean_ids=='upper_rewarded')[0]
+# 	lower_idx = np.where(clean_ids=='lower_rewarded')[0]
+# 	return clean_times[upper_idx],clean_times[lower_idx]
+

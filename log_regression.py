@@ -93,7 +93,7 @@ Returns:
 def regress_array(X,y):
 	##make sure that the array is in binary form
 	if (y.min() != 0) or (y.max() != 1):
-		print "Converting to binary y values"
+		print("Converting to binary y values")
 		y = binary_y(y)
 	##setup multiprocessing to do the permutation testing
 	arglist = [(X[:,n,:],y) for n in range(X.shape[1])]

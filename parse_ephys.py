@@ -26,7 +26,7 @@ def get_spike_data(f_in,smooth_method='bins',smooth_width=50,z_score=False):
 	##open the file and get the name of the sorted units
 	f = h5py.File(f_in,'r')
 	##get the names of all the sorted units contained in this file
-	units_list = [x for x in f.keys() if x.startswith("sig")]
+	units_list = [x for x in list(f) if x.startswith("sig")]
 	##sort this list just in case I want to go back and look at the data unit-by-unit
 	units_list.sort()
 	#the data to return
@@ -105,7 +105,7 @@ def get_session_duration(f_in):
 	##get a list of the LFP channel timestamp arrays
 	##(more accurate than the len of the value arrs in cases where
 	##the recording was paused)
-	AD_ts = [x for x in f.keys() if x.endswith('_ts')]
+	AD_ts = [x for x in list(f) if x.endswith('_ts')]
 	##They should all be the same, so just get the first one
 	sig = AD_ts[0]
 	duration = np.ceil(f[sig][-1]*1000.0).astype(int)
@@ -134,7 +134,7 @@ def gauss_convolve(array, sigma):
 		if array.shape[0] == array.size:
 			result = gaussian_filter(array,sigma=sigma,order=0,mode="constant",cval = 0.0)
 		else:
-			print "Check your array input to gaussian filter"
+			print("Check your array input to gaussian filter")
 	return result
 
 """

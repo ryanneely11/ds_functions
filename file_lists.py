@@ -14,8 +14,29 @@ elif _platform == 'darwin':
 ##save location
 save_loc = os.path.join(root,"Ryan/DS_animals/results")
 
+animals = ['S1','S2','S3']
+
 behavior_files = [
 ##S1 files
+# os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D01.hdf5"), ##first 6 days have only 1 lever
+# os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D02.hdf5"),
+# os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D03.hdf5"),
+# os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D04.hdf5"),
+# os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D05.hdf5"),
+# os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D06.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D07.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D08.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D09.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D10.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D11.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D12.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D13.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D15.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D16.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D17.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D18.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D19.hdf5"),
+##S1 files with ephys recordings
 os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_R01.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_R02.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_R03.hdf5"),
@@ -34,6 +55,25 @@ os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_R15.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_R16.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_R17.hdf5"),
 ##S2 files
+# os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D01.hdf5"), ##first 6 days only have 1 lever
+# os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D02.hdf5"),
+# os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D03.hdf5"),
+# os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D04.hdf5"),
+# os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D05.hdf5"),
+# os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D06.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D07.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D08.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D09.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D10.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D11.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D12.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D13.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D14.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D16.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D17.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D18.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D19.hdf5"),
+##S2 files with ephys recordings
 os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_R01.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_R02.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_R03.hdf5"),
@@ -53,7 +93,25 @@ os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_R16.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_R17.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_R18.hdf5"),
 ##S3 files
-#os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_R01.hdf5"),
+# os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D01.hdf5"), ##first 6 days have only 1 lever
+# os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D02.hdf5"),
+# os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D03.hdf5"),
+# os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D04.hdf5"),
+# os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D05.hdf5"),
+# os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D06.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D07.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D08.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D09.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D10.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D11.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D12.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D14.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D15.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D16.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D17.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D18.hdf5"),
+##S3 files with ephys recordings
+os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_R01.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_R02.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_R03.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_R04.hdf5"),
@@ -110,7 +168,7 @@ os.path.join(root,"Ryan/DS_animals/S2/neural_data/S2_R16r.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S2/neural_data/S2_R17r.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S2/neural_data/S2_R18r.hdf5"),
 ##S3 files
-#os.path.join(root,"Ryan/DS_animals/S3/neural_data/S3_R01r.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S3/neural_data/S3_R01r.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S3/neural_data/S3_R02r.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S3/neural_data/S3_R03r.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S3/neural_data/S3_R04r.hdf5"),
@@ -130,7 +188,8 @@ os.path.join(root,"Ryan/DS_animals/S3/neural_data/S3_R17r.hdf5"),
 
 ##run a test on loading that all files exist and can be opened
 ##also make sure all files are properly matched
-for f_behavior,f_ephys in zip(behavior_files,ephys_files):
+e_behavior = [x for x in behavior_files if x[-8]=='R']
+for f_behavior,f_ephys in zip(e_behavior,ephys_files):
 	behavior_id = f_behavior[-7:-5]
 	ephys_id = f_ephys[-8:-6]
 	assert behavior_id == ephys_id
@@ -138,3 +197,13 @@ for f_behavior,f_ephys in zip(behavior_files,ephys_files):
 	f.close()
 	f = h5py.File(f_ephys,'r')
 	f.close()
+
+### a function to get a dictionary of file paths split by animal.
+def split_behavior_by_animal():
+	global animals
+	global behavior_files
+	by_animal = {}
+	for a in animals:
+		files = [x for x in behavior_files if x[-11:-9]==a]
+		by_animal[a] = files
+	return by_animal
