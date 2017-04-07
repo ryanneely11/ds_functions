@@ -21,7 +21,7 @@ Returns:
 	-X data array in shape n_units x n_trials x b_bins
 """
 def get_event_spikes(f_behavior,f_ephys,event_name,window=[400,0],
-	smooth_method='gauss',smooth_width=30,z_score=True):
+	smooth_method='gauss',smooth_width=30,z_score=True,min_rate=0.1):
 	##start by getting the parsing the behavior timestamps
 	ts = pt.get_event_data(f_behavior)[event_name]
 	##get the spike data for the full session
@@ -33,6 +33,8 @@ def get_event_spikes(f_behavior,f_ephys,event_name,window=[400,0],
 	windows = windows.astype(int)
 	##now get the data windows
 	X_trials = pe.X_windows(X_raw,windows) ##this is a LIST, not an array
+	##get rid of really low rate units
+	X_trials = remove_low_rate_units(X_trials,min_rate)
 	##NOW we can do smoothing and z-scoring
 	if smooth_method != 'none':
 		for t in range(len(X_trials)):
@@ -407,5 +409,39 @@ def trials_to_crit(block_start,correct_lever,incorrect_lever,
 		n_trials = np.nan
 		print("Criterion never reached after "+str(ids.size)+" trials")
 	return n_trials
+
+"""
+A helper function to remove data from units with low spike rates. 
+Inputs:
+	X_trials: a list or array of binary array of spike data, in shape 
+		trials x (units x bins). Assumes 1-ms binning!
+	min_rate: minimum spike rate, in Hz
+Returns:
+	X_trials: same array with data removed from units that don't meet the min
+		spike rate requirements
+"""
+def remove_low_rate_units(X_trials,min_rate=0.1):
+	##copy data into a new list, so we retain compatibility with arrays
+	X_clean = []
+	for i in range(len(X_trials)):
+		X_clean.append(X_trials[i])
+	##get some data about the data
+	n_trials = len(X_clean)
+	n_units = X_clean[0].shape[0]
+	n_bins = X_clean[1].shape[1]
+	##create a matrix that tracks spike rates over trials
+	unit_rates = np.zeros(n_units)
+	##now add together the mean rate for each unit over all trials
+	for t in range(n_trials):
+		unit_rates[:] += (X_clean[t].sum(axis=1)/X_clean[t].shape[1])*1000
+	##take the mean rate over all trials
+	unit_rates = unit_rates/len(X_trials)
+	##find unit indices where the rate is below the min allowed 
+	remove = np.where(unit_rates<min_rate)[0]
+	##now get rid of the units, if any
+	if remove.size > 0:
+		for t in range(n_trials):
+			X_clean[t] = np.delete(X_clean[t],remove,axis=0)
+	return X_clean
 
 

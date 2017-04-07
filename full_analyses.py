@@ -14,6 +14,26 @@ import glob
 import dpca
 
 """
+A function to run logistic regression using the new functions in lr2.
+	-window: time window to use for analysis, in ms
+	-smooth_method: type of smoothing to use; choose 'bins', 'gauss', or 'none'
+	-smooth_width: size of the bins or gaussian kernel in ms
+	-z_score: if True, z-scores the array
+	
+Returns:
+	all data saved to file.
+"""
+def log_regression2(window=500,smooth_method='gauss',smooth_width=30,z_score=True,
+	min_rate=0.1):
+	for f_behavior,f_ephys in zip(file_lists.e_behavior,file_lists.ephys_files):
+		sa.log_regress_session(f_behavior,f_ephys,window=window,
+			smooth_method=smooth_method,smooth_width=smooth_width,z_score=z_score,
+			min_rate=min_rate)
+	print("All regressions complete")
+
+
+
+"""
 A function to compute a probability of switching over trials at a reversal
 boundary. 
 Inputs:

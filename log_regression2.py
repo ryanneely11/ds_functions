@@ -34,7 +34,7 @@ def log_fit(X,y,n_iter=5):
 		X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.33,random_state=42)
 		##make sure you have both classes of values in your training and test sets
 		if np.unique(y_train).size<2 or np.unique(y_test).size<2:
-			print "Re-splitting cross val data; only one class type in current set"
+			print("Re-splitting cross val data; only one class type in current set")
 			X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.5,random_state=42)
 		##now fit to the test data
 		lr.fit(X_train,y_train)
@@ -92,12 +92,13 @@ Inputs:
 	n_iter_p: the number of permutation iterations to run
 Returns:
 	accuracies: an array of the prediction accuracies for each dataset
+	chance_rates: the chance accuracy rates
 	p_vals: an array of the significance values for each dataset
 """
 def permutation_test_multi(X,y,n_iter_cv=5,n_iter_p=500):
 	##make sure that the array is in binary form
 	if (y.min() != 0) or (y.max() != 1):
-		print "Converting to binary y values"
+		print("Converting to binary y values")
 		y = binary_y(y)
 	##setup multiprocessing to do the permutation testing
 	arglist = [(X[n,:,:],y,n_iter_cv,n_iter_p) for n in range(X.shape[0])]

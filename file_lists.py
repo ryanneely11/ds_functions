@@ -189,6 +189,7 @@ os.path.join(root,"Ryan/DS_animals/S3/neural_data/S3_R17r.hdf5"),
 ##run a test on loading that all files exist and can be opened
 ##also make sure all files are properly matched
 e_behavior = [x for x in behavior_files if x[-8]=='R']
+
 for f_behavior,f_ephys in zip(e_behavior,ephys_files):
 	behavior_id = f_behavior[-7:-5]
 	ephys_id = f_ephys[-8:-6]

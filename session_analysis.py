@@ -7,25 +7,84 @@ import parse_trials as ptr
 import parse_ephys as pe
 import regression as re
 import file_lists
-import log_regression as lr
+import log_regression2 as lr2
 import os
 import h5py
 from functools import reduce
 import dpca
+import os
+
+save_root = os.path.join(file_lists.save_loc,"LogisticRegression/30ms_gauss_0.05")
 
 """
 A session to run logistic regression on pairs of task variables. Output is to 
 a file, so data is saved. 
 Inputs:
+	-f_behavior: path to behavior data
+	-f_ephys: path to ephys data
+	-window: time window to use for analysis, in ms
+	-smooth_method: type of smoothing to use; choose 'bins', 'gauss', or 'none'
+	-smooth_width: size of the bins or gaussian kernel in ms
+	-z_score: if True, z-scores the array
 	
 Returns:
-
+	all data saved to file.
 """
-def log_regress_session(f_behavior,f_ephys,smooth_method='gauss',smooth_width=30,
-	window=500,z_score=True):
-##TODO: can't really use the same window for all behavioral epochs. I guess I'll 
-##just use a equally-sized window for everything for the time being...
-	
+def log_regress_session(f_behavior,f_ephys,window=500,smooth_method='gauss',
+	smooth_width=30,z_score=True,min_rate=0.1):
+	global event_pairs
+	global save_root
+	print("Computing regressions for "+f_behavior[-11:-4]+":")
+	##open a file to save the data
+	save_path = os.path.join(save_root,f_behavior[-11:-9],f_behavior[-11:-4]+".hdf5")
+	##create the file
+	f_out = h5py.File(save_path,'a')
+	f_out.close()
+	for event in list(event_pairs):
+		print("Computing regression on "+event+" trials...")
+		##get all of the event pairs	
+		##start by getting the list of event pairs
+		ts_ids = event_pairs[event]
+		##create a custom window depending on the epoch we are interested in
+		if event == 'context' or event == 'action':
+			window = [window,50] ##we'll pad with 50 ms just in case
+		elif event == 'outcome':
+			window = [50,window]
+		##now get the data arrays for each of the event types
+		X_all = []
+		y_all = []
+		y_strings_all = []
+		for i,name in enumerate(ts_ids):
+			X_data = ptr.get_event_spikes(f_behavior,f_ephys,name,window=window,
+				smooth_method=smooth_method,smooth_width=smooth_width,z_score=z_score,
+				min_rate=min_rate)
+			##now create label data for this set
+			y_data = np.ones(X_data.shape[0])*i
+			y_strings = np.empty(X_data.shape[0],dtype='<U19')
+			y_strings[:] = name
+			X_all.append(X_data)
+			y_all.append(y_data)
+			y_strings_all.append(y_strings)
+		##concatenate data
+		X_all = np.concatenate(X_all,axis=0)
+		y_all = np.concatenate(y_all,axis=0)
+		y_strings_all = np.concatenate(y_strings_all,axis=0)
+		##now re-arrange the X_data so it's units x trials x bins
+		X_all = np.transpose(X_all,(1,0,2))
+		##now we can run the regression
+		accuracies,chance_rates,pvals = lr2.permutation_test_multi(X_all,y_all)
+		##finally, we can save these data
+		print("Saving...")
+		f_out = h5py.File(save_path,'a')
+		group = f_out.create_group(event)
+		group.create_dataset("accuracies",data=accuracies)
+		group.create_dataset("chance_rates",data=chance_rates)
+		group.create_dataset("pvals",data=pvals)
+		group.create_dataset("X",data=X_all)
+		group.create_dataset("y",data=y_strings_all)
+		f_out.close()
+		print("Done")
+	print("Session complete")
 
 
 """
@@ -191,63 +250,63 @@ Inputs:
 Returns:
 	results: dictionary containing significant index values for each epoch and condition
 """
-def log_regress_session(f_behavior,f_ephys,epoch_durations=[1,0.4,1,1],smooth_method='bins',
-	smooth_width=200,z_score=True,save=True):
-	##define some parameters
-	##specify a bin size based on input arguments
-	if smooth_method == 'bins':
-		bin_size = smooth_width
-	else:
-		bin_size = 1 ##'gauss' and 'none' options use a bin width of 1 ms
-	epoch_list = ['choice','action','delay','outcome'] ##the different trial epochs
-	condition_list = ['choice','block_type','reward'] ##the different conditions to predict
-	results = {} ##the return dictionary
-	##create the file to save if requested
-	if save:
-		current_file = f_behavior[-11:-5]
-		out_path = os.path.join(file_lists.save_loc,current_file+".hdf5")
-		f_out = h5py.File(out_path,'w-')
-	##start by getting the behavioral data,and put it into an array.
-	##we will use the old regression functions to get the values we need.
-	ts,ts_idx = pt.get_trial_data(f_behavior) ##trial timestamps and indices
-	R = re.regressors_model1(ts_idx) ##the regressors matrix,using the old function for linreg
-	Y = np.zeros((3,R.shape[0])) ##the new matrix with the conditions that we care about
-	Y[0,:] = lr.binary_y(R[:,0]) ##the upper or lower lever press choice
-	Y[1,:] = R[:,1] ##the outcome (rewarded or unrewarded)
-	Y[2,:] = lr.binary_y(R[:,3]) ##the block type (upper_rewarded = 1, lower_rewarded = 0)
-	##now get the epys data for the full session
-	X = pe.get_spike_data(f_ephys,smooth_method=smooth_method,
-		smooth_width=smooth_width,z_score=z_score)
-	##run through each epoch
-	for epoch,duration in zip(epoch_list,epoch_durations):
-		ts_e = ptr.get_epoch_windows(ts,epoch,duration) ##the timestamp windows for this epoch
-		ts_e = ptr.ts_to_bins(ts_e,bin_size)
-		##now the spike data for this epoch
-		Xe = pe.X_windows(X,ts_e)
-		##now create a sub-dictionary for this epoch
-		results[epoch] = {}
-		##also create a group in the datafile
-		if save:
-			f_out.create_group(epoch)
-			##save the raw data here 
-			f_out[epoch].create_dataset("X",data=Xe)
-		##now predict different conditions for this epoch
-		for n, condition in enumerate(condition_list):
-			y = Y[n,:]
-			sig_idx = lr.regress_array(Xe,y)
-			##save this data in the results dictionary
-			results[epoch][condition] = sig_idx
-			##also get the strength of a the unit's prediction for this epoch and cond
-			pred_strength = lr.matrix_pred_strength(Xe,y)
-			##save in the file
-			if save:
-				group = f_out[epoch].create_group(condition)
-				group.create_dataset("sig_idx",data=sig_idx)
-				group.create_dataset("y",data=y)
-				group.create_dataset("pred_strength",data=pred_strength)
-	if save:
-		f_out.close()
-	return results
+# def log_regress_session(f_behavior,f_ephys,epoch_durations=[1,0.4,1,1],smooth_method='bins',
+# 	smooth_width=200,z_score=True,save=True):
+# 	##define some parameters
+# 	##specify a bin size based on input arguments
+# 	if smooth_method == 'bins':
+# 		bin_size = smooth_width
+# 	else:
+# 		bin_size = 1 ##'gauss' and 'none' options use a bin width of 1 ms
+# 	epoch_list = ['choice','action','delay','outcome'] ##the different trial epochs
+# 	condition_list = ['choice','block_type','reward'] ##the different conditions to predict
+# 	results = {} ##the return dictionary
+# 	##create the file to save if requested
+# 	if save:
+# 		current_file = f_behavior[-11:-5]
+# 		out_path = os.path.join(file_lists.save_loc,current_file+".hdf5")
+# 		f_out = h5py.File(out_path,'w-')
+# 	##start by getting the behavioral data,and put it into an array.
+# 	##we will use the old regression functions to get the values we need.
+# 	ts,ts_idx = pt.get_trial_data(f_behavior) ##trial timestamps and indices
+# 	R = re.regressors_model1(ts_idx) ##the regressors matrix,using the old function for linreg
+# 	Y = np.zeros((3,R.shape[0])) ##the new matrix with the conditions that we care about
+# 	Y[0,:] = lr.binary_y(R[:,0]) ##the upper or lower lever press choice
+# 	Y[1,:] = R[:,1] ##the outcome (rewarded or unrewarded)
+# 	Y[2,:] = lr.binary_y(R[:,3]) ##the block type (upper_rewarded = 1, lower_rewarded = 0)
+# 	##now get the epys data for the full session
+# 	X = pe.get_spike_data(f_ephys,smooth_method=smooth_method,
+# 		smooth_width=smooth_width,z_score=z_score)
+# 	##run through each epoch
+# 	for epoch,duration in zip(epoch_list,epoch_durations):
+# 		ts_e = ptr.get_epoch_windows(ts,epoch,duration) ##the timestamp windows for this epoch
+# 		ts_e = ptr.ts_to_bins(ts_e,bin_size)
+# 		##now the spike data for this epoch
+# 		Xe = pe.X_windows(X,ts_e)
+# 		##now create a sub-dictionary for this epoch
+# 		results[epoch] = {}
+# 		##also create a group in the datafile
+# 		if save:
+# 			f_out.create_group(epoch)
+# 			##save the raw data here 
+# 			f_out[epoch].create_dataset("X",data=Xe)
+# 		##now predict different conditions for this epoch
+# 		for n, condition in enumerate(condition_list):
+# 			y = Y[n,:]
+# 			sig_idx = lr.regress_array(Xe,y)
+# 			##save this data in the results dictionary
+# 			results[epoch][condition] = sig_idx
+# 			##also get the strength of a the unit's prediction for this epoch and cond
+# 			pred_strength = lr.matrix_pred_strength(Xe,y)
+# 			##save in the file
+# 			if save:
+# 				group = f_out[epoch].create_group(condition)
+# 				group.create_dataset("sig_idx",data=sig_idx)
+# 				group.create_dataset("y",data=y)
+# 				group.create_dataset("pred_strength",data=pred_strength)
+# 	if save:
+# 		f_out.close()
+# 	return results
 
 
 """
@@ -330,9 +389,9 @@ def align_ts(ts):
 A dictionary of event pairs to use in analyses.
 """
 event_pairs = {
-	context['upper_context_lever','lower_context_lever'],
-	action:['upper_lever','lower_lever'],
-	outcome:['rewarded_poke','unrewarded_poke']
+	'context':['upper_context_lever','lower_context_lever'],
+	'action':['upper_lever','lower_lever'],
+	'outcome':['rewarded_poke','unrewarded_poke']
 }
 
 
