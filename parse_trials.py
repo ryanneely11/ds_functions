@@ -4,6 +4,43 @@
 
 import numpy as np
 import parse_timestamps as pt
+import dpca
+import parse_ephys as pe
+
+"""
+A function to get windowed data around a particular type of event
+Inputs:
+	-f_behavior: path to behavior data file
+	-f_ephys: path to ephys data file
+	-event_name: string corresponding to the event type to time lock to
+	-window [pre_event, post_event] window, in ms
+	-smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	-smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+Returns:
+	-X data array in shape n_units x n_trials x b_bins
+"""
+def get_event_spikes(f_behavior,f_ephys,event_name,window=[400,0],
+	smooth_method='gauss',smooth_width=30,z_score=True):
+	##start by getting the parsing the behavior timestamps
+	ts = pt.get_event_data(f_behavior)[event_name]
+	##get the spike data for the full session
+	X_raw = pe.get_spike_data(f_ephys,smooth_method='none',z_score=False) ##dont' bin or smooth yet
+	##generate the data windows 
+	windows = np.zeros((ts.size,2))
+	windows[:,0] = ts-window[0]
+	windows[:,1] = ts+window[1]
+	windows = windows.astype(int)
+	##now get the data windows
+	X_trials = pe.X_windows(X_raw,windows) ##this is a LIST, not an array
+	##NOW we can do smoothing and z-scoring
+	if smooth_method != 'none':
+		for t in range(len(X_trials)):
+			X_trials[t] = pe.smooth_spikes(X_trials[t],smooth_method,smooth_width)
+	X_trials = np.asarray(X_trials)
+	if z_score:
+		X_trials = dpca.zscore_across_trials(X_trials)
+	return X_trials
 
 """
 A function to look at the behavior around reversals.
@@ -25,14 +62,17 @@ def get_reversals(f_behavior,f_behavior_last=None,window=[30,30]):
 	if f_behavior_last is not None:
 		data_last = pt.get_event_data(f_behavior_last)
 		##figure out which block was last
-		if data_last['upper_rewarded'].max()>data_last['lower_rewarded'].max():
-			last_block_type = 'upper_rewarded'
-			last_block_ts = data['upper_rewarded'].max()
-		elif data_last['lower_rewarded'].max()>data_last['upper_rewarded'].max():
-			last_block_type = 'lower_rewarded'
-			last_block_ts = data['lower_rewarded'].max()
-		else:
-			print("Unrecognized block type")
+		try:
+			if data_last['upper_rewarded'].max()>data_last['lower_rewarded'].max():
+				last_block_type = 'upper_rewarded'
+				last_block_ts = data['upper_rewarded'].max()
+			elif data_last['lower_rewarded'].max()>data_last['upper_rewarded'].max():
+				last_block_type = 'lower_rewarded'
+				last_block_ts = data['lower_rewarded'].max()
+			else:
+				print("Unrecognized block type")
+		except ValueError:
+			print("Only one block type detected")
 	##get all the timestamps of the reversals for the current session
 	reversals = np.concatenate((data['upper_rewarded'],
 		data['lower_rewarded'])) ##first one is the start, not a "reversal"
@@ -72,11 +112,11 @@ def get_reversals(f_behavior,f_behavior_last=None,window=[30,30]):
 		reversals = np.concatenate((last_block_ts,reversals))
 		trials = np.concatenate((last_trials,trials))
 		ids = np.concatenate((last_ids,ids))
-		##pad the ids and trials in case our window exceeds their bounds
-		pad = np.empty(window[0])
-		pad[:] = np.nan
-		trials = np.concatenate((pad,trials,pad))
-		ids = np.concatenate((pad,ids,pad))
+	##pad the ids and trials in case our window exceeds their bounds
+	pad = np.empty(window[0])
+	pad[:] = np.nan
+	trials = np.concatenate((pad,trials,pad))
+	ids = np.concatenate((pad,ids,pad))
 	##now we have everything we need to start parsing reversals
 	##a container to store the data
 	reversal_data = np.zeros((reversals.size-1,window[0]+window[1]))
@@ -98,8 +138,8 @@ def get_reversals(f_behavior,f_behavior_last=None,window=[30,30]):
 				reversal_data[r-1,i] = 2
 			elif ids[rev_idx-(window[0]-i)] == 'incorrect_lever':
 				reversal_data[r-1,i] = 1
-			else:
-				print("unrecognized lever type")
+			# else:
+			# 	print("unrecognized lever type")
 	return reversal_data
 
 
@@ -367,6 +407,5 @@ def trials_to_crit(block_start,correct_lever,incorrect_lever,
 		n_trials = np.nan
 		print("Criterion never reached after "+str(ids.size)+" trials")
 	return n_trials
-
 
 

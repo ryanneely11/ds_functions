@@ -24,7 +24,24 @@ Returns:
 		at any given trial. Lever 1 is whatever lever was rewarded before the switch.
 """
 def get_switch_prob(session_range=[0,4],window=[30,30]):
-	pass
+	##load metadata and file info from the repository file
+	animals = file_lists.animals ##list of animal names
+	file_dict = file_lists.split_behavior_by_animal() ##dict of file paths by animal
+	master_list = [] ##to store data from all animals
+	##get data for each animal
+	for a in animals:
+		files = file_dict[a][session_range[0]:session_range[1]]
+		for i in range(len(files)):
+			print("Working on file "+files[i])
+			if i > 0:
+				master_list.append(ptr.get_reversals(files[i],
+					f_behavior_last=files[i-1],window=window))
+			else:
+				master_list.append(ptr.get_reversals(files[i],window=window))
+	##now look at the reversal probability across all of these sessions
+	master_list = np.concatenate(master_list,axis=0)
+	l2_prob = get_l2_prob(master_list)
+	return l2_prob
 
 """
 A function to compute "volatility". Here, I'm defining that

@@ -19,6 +19,39 @@ import dpca
 from scipy import stats
 
 """
+A function to plot the reversal curves early VS late.
+"""
+def plot_rev_curves(early_range=[0,5],late_range=[-6,-1],window=[80,80],save=False):
+	##get the early data
+	early = fa.get_switch_prob(session_range=early_range,window=window)
+	##the late data
+	late = fa.get_switch_prob(session_range=late_range,window=window)
+	##smooth things out a bit
+	early = pe.gauss_convolve(early,1)
+	late = pe.gauss_convolve(late,1)
+	##the x-axis in trials
+	x = np.arange(-window[0],window[1])
+	##plot it
+	fig,ax = plt.subplots(1)
+	ax.plot(x,early,color='b',marker='o',label='first 4 days',linewidth=2)
+	ax.plot(x,late,color='cyan',marker='o',label='last 4 days',linewidth=2)
+	ax.vlines(0,0,1,color='r',linestyle='dashed',linewidth=2)
+	ax.set_ylabel("Probability of pressing lever 2",fontsize=14)
+	ax.set_xlabel("Trials after switch",fontsize=14)
+	for tick in ax.xaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	for tick in ax.yaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	ax.legend()
+	ax.set_title("Performance around block switches",fontsize=14)
+	if save:
+		fig.savefig("/Volumes/Untitled/Ryan/DS_animals/plots/switch_curves.png")
+		fig.savefig("/Volumes/Untitled/Ryan/DS_animals/plots/switch_curves.svg")
+
+
+
+
+"""
 A function to plot performance (correct press/all presses)
 for all animals across sessions.
 """
@@ -1315,10 +1348,10 @@ def plot_dpca_results(Z,time,sig_masks,var_explained,events,n_components=3):
 	LUT = dpca.condition_LUT
 	##set up the figure
 	fig = plt.figure()
-	n_conditions = len(LUT.keys())
+	n_conditions = len(list(LUT))
 	##we'll plot the first n dPC's for each condition
 	for c in range(n_conditions):
-		condition = LUT.keys()[c]
+		condition = list(LUT)[c]
 		title = LUT[condition]
 		data = Z[condition]
 		for p in range(n_components):

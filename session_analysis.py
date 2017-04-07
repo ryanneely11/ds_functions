@@ -14,6 +14,21 @@ from functools import reduce
 import dpca
 
 """
+A session to run logistic regression on pairs of task variables. Output is to 
+a file, so data is saved. 
+Inputs:
+	
+Returns:
+
+"""
+def log_regress_session(f_behavior,f_ephys,smooth_method='gauss',smooth_width=30,
+	window=500,z_score=True):
+##TODO: can't really use the same window for all behavioral epochs. I guess I'll 
+##just use a equally-sized window for everything for the time being...
+	
+
+
+"""
 A function to run dPCA analysis on data from one session
 
 """
@@ -133,7 +148,7 @@ def condition_averaged_responses(f_behavior,f_ephys,epoch='choice',epoch_duratio
 	if not use_unrewarded: ##get rid of unrewarded trials if requested
 		cond_idx = ptr.remove_unrewarded(cond_idx)
 	##the list of conditions
-	conditions = cond_idx.keys()
+	conditions = list(cond_idx)
 	##get the ephys data. 
 	X = pe.get_spike_data(f_ephys,smooth_method=smooth_method,
 		smooth_width=smooth_width,z_score=False) ##the spike data for the full trial
@@ -256,8 +271,8 @@ def parse_log_regression(f_in,epochs=None):
 	f = h5py.File(f_in,'r')
 	##let's start by pooling data from all epochs
 	if epochs is None:
-		epochs = f.keys()
-	conditions = [x for x in f[epochs[0]].keys() if x != 'X'] ##the data matrix is also stored here
+		epochs = list(f)
+	conditions = [x for x in list(f[epochs[0]]) if x != 'X'] ##the data matrix is also stored here
 	##let's make a dictionary of indices for each condition, pooling across epochs
 	##for the hell of it we'll also keep info about the prediction strengths
 	cond_idx = {}
@@ -311,9 +326,14 @@ def align_ts(ts):
 	return ts_rel
 
 
-
-
-
+"""
+A dictionary of event pairs to use in analyses.
+"""
+event_pairs = {
+	context['upper_context_lever','lower_context_lever'],
+	action:['upper_lever','lower_lever'],
+	outcome:['rewarded_poke','unrewarded_poke']
+}
 
 
 

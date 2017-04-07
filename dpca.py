@@ -66,9 +66,9 @@ def get_dataset(f_behavior,f_ephys,smooth_method='both',smooth_width=[40,50],
 	n_bins = X_all.shape[2]
 	##the max number of trials in any condition pair
 	n_trials = 0
-	for i in range(len(ts_idx.keys())):
-		if ts_idx.values()[i].shape[0] > n_trials:
-			n_trials = ts_idx.values()[i].shape[0]
+	for val in ts_idx.values():
+		if val.shape[0] > n_trials:
+			n_trials = val.shape[0]
 	##container for the whole thing
 	condition_sizes = []
 	for i in range(len(condition_pairs)):

@@ -132,7 +132,7 @@ def gauss_convolve(array, sigma):
 	##if it's 1-D:
 	except IndexError:
 		if array.shape[0] == array.size:
-			result = gaussian_filter(array,sigma=sigma,order=0,mode="constant",cval = 0.0)
+			result = gaussian_filter(array,sigma=sigma,order=0,mode="mirror")
 		else:
 			print("Check your array input to gaussian filter")
 	return result

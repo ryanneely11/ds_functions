@@ -114,6 +114,11 @@ def get_event_data(f_behavior):
 		else:
 			print("Error: unknown event type")
 			break
+	##finally, get the context-dependent presses
+	upper_context_levers = get_context_levers(upper_rewarded,lower_rewarded,
+		np.asarray(upper_lever),np.asarray(lower_lever),session_length,'upper')
+	lower_context_levers = get_context_levers(upper_rewarded,lower_rewarded,
+		np.asarray(upper_lever),np.asarray(lower_lever),session_length,'lower')
 	##create a dictionary of this data
 	results = {
 	'upper_lever':np.asarray(upper_lever),
@@ -126,6 +131,8 @@ def get_event_data(f_behavior):
 	'unrewarded_poke':np.asarray(unrewarded_poke),
 	'correct_poke':np.asarray(correct_poke),
 	'incorrect_poke':np.asarray(incorrect_poke),
+	'upper_context_lever':upper_context_levers,
+	'lower_context_lever':lower_context_levers,
 	'upper_rewarded':upper_rewarded,
 	'lower_rewarded':lower_rewarded,
 	'session_length':session_length
@@ -607,6 +614,37 @@ def which_block(results,ts):
 				break
 	return block
 
+
+
+"""
+A helper function to get presses of all kinds occurring during a particular
+context
+Inputs:
+	-upper_rewarded: array of switches to upper lever rewarded
+	-lower_rewarded: ditto for lower lever
+	-session_length: 
+	-context, the context to get lever presses for
+Returns:
+	-context_presses: timestamps of all presses that occur in the given context
+"""
+def get_context_levers(upper_rewarded,lower_rewarded,upper_lever,lower_lever,
+	session_length,context):
+	##start by getting the block boundaries
+	block_times = get_block_times(lower_rewarded,upper_rewarded,session_length)
+	##now just get the periods for the context that we care about
+	block_windows = block_times[context]
+	##now get the timestamps of all presses in each block
+	presses = []
+	for block in block_windows:
+		##upper and lower lever timestamp arrays contain all the presses
+		idx_upper = np.nonzero(np.logical_and(upper_lever>=block[0],
+			upper_lever<=block[1]))[0]
+		idx_lower = np.nonzero(np.logical_and(lower_lever>=block[0],
+			lower_lever<=block[1]))[0]
+		presses.append(upper_lever[idx_upper])
+		presses.append(lower_lever[idx_lower])
+	presses = np.concatenate(presses)
+	return presses
 """
 A helper function to clean an array of block times.
 Sometimes the raspberry pi had a glitch where it would
