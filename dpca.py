@@ -2,7 +2,7 @@
 ##functions for implementing dPCA, using the library from Kobak et al, 2016
 
 import numpy as np
-from dPCA import dPCA
+# from dPCA import dPCA
 import parse_timestamps as pt
 import parse_ephys as pe
 import collections

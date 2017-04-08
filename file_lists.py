@@ -7,7 +7,7 @@ from sys import platform as _platform
 import h5py
 
 if _platform == 'win32':
-	root = r'D:/'
+	root = r'J:/'
 elif _platform == 'darwin':
 	root = "/Volumes/Untitled"
 
@@ -38,7 +38,7 @@ os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D18.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D19.hdf5"),
 ##S1 files with ephys recordings
 os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_R01.hdf5"),
-os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_R02.hdf5"),
+# os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_R02.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_R03.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_R04.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_R05.hdf5"),
@@ -132,7 +132,7 @@ os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_R17.hdf5")
 ephys_files = [
 ##S1 files
 os.path.join(root,"Ryan/DS_animals/S1/neural_data/S1_R01r.hdf5"),
-os.path.join(root,"Ryan/DS_animals/S1/neural_data/S1_R02r.hdf5"),
+# os.path.join(root,"Ryan/DS_animals/S1/neural_data/S1_R02r.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S1/neural_data/S1_R03r.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S1/neural_data/S1_R04r.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S1/neural_data/S1_R05r.hdf5"),

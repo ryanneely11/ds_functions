@@ -71,6 +71,7 @@ def permutation_test(args):
 	times_exceeded = 0
 	chance_rates = [] 
 	for i in range(n_iter_p):
+		# print("\rFitting permutation "+str(i+1)+" of "+str(n_iter_p))
 		y_shuff = np.random.permutation(y)
 		a_shuff = log_fit(X,y_shuff,n_iter=n_iter_cv)
 		if a_shuff > a_actual:
