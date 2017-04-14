@@ -26,7 +26,7 @@ Returns:
 def log_regression2(window=500,smooth_method='gauss',smooth_width=30,z_score=True,
 	min_rate=0.1):
 	for f_behavior,f_ephys in zip(file_lists.e_behavior,file_lists.ephys_files):
-		sa.log_regress_session(f_behavior,f_ephys,window=window,
+		sa.log_regress_session(f_behavior,f_ephys,win=window,
 			smooth_method=smooth_method,smooth_width=smooth_width,z_score=z_score,
 			min_rate=min_rate)
 	print("All regressions complete")

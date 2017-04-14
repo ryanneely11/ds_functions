@@ -31,7 +31,7 @@ Inputs:
 Returns:
 	all data saved to file.
 """
-def log_regress_session(f_behavior,f_ephys,window=500,smooth_method='gauss',
+def log_regress_session(f_behavior,f_ephys,win=500,smooth_method='gauss',
 	smooth_width=30,z_score=True,min_rate=0):
 	global event_pairs
 	global save_root
@@ -49,9 +49,9 @@ def log_regress_session(f_behavior,f_ephys,window=500,smooth_method='gauss',
 			ts_ids = event_pairs[event]
 			##create a custom window depending on the epoch we are interested in
 			if event == 'context' or event == 'action':
-				window = [window,50] ##we'll pad with 50 ms just in case
+				window = [win,50] ##we'll pad with 50 ms just in case
 			elif event == 'outcome':
-				window = [50,window]
+				window = [50,win]
 			##now get the data arrays for each of the event types
 			X_all = []
 			y_all = []
