@@ -20,6 +20,8 @@ inputs:
 	n_iter: the number of times to repeat the x-validation (mean is returned)
 Returns:
 	accuracy: mean proportion of test data correctly predicted by the model.
+	llr_p: The chi-squared probability of getting a log-likelihood ratio statistic greater than llr.
+		 llr has a chi-squared distribution with degrees of freedom df_model
 """
 def log_fit(X,y,n_iter=5):
 	##get X in the correct shape for sklearn function
@@ -43,7 +45,11 @@ def log_fit(X,y,n_iter=5):
 		y_pred = (results.predict(X_test)>thresh).astype(float)
 		##lastly, compare the accuracy of the prediction
 		accuracy[i] = (y_pred==y_test).sum()/float(y_test.size)
-	return accuracy.mean()
+	##now get the p-value info for this model
+	logit = sm.Logit(y,X)
+	results = logit.fit(method='cg',disp=False,skip_hession=True,warn_convergence=False)
+	llr_p = results.llr_pvalue
+	return accuracy.mean(),llr_p
 
 """
 A function to perform a permutation test for significance
@@ -66,7 +72,7 @@ def permutation_test(args):
 	n_iter_cv = args[2]
 	n_iter_p = args[3]
 	##get the accuracy of the real data, to use as the comparison value
-	a_actual = log_fit(X,y,n_iter=n_iter_cv)
+	a_actual,llr_p = log_fit(X,y,n_iter=n_iter_cv)
 	#now run the permutation test, keeping track of how many times the shuffled
 	##accuracy outperforms the actual
 	times_exceeded = 0
@@ -77,7 +83,7 @@ def permutation_test(args):
 		if a_shuff > a_actual:
 			times_exceeded += 1
 		chance_rates.append(a_shuff)
-	return a_actual, np.asarray(chance_rates).mean(), float(times_exceeded)/n_iter_p
+	return a_actual, np.asarray(chance_rates).mean(), float(times_exceeded)/n_iter_p, llr_p
 
 """
 a function to run permutation testing on multiple
@@ -112,11 +118,13 @@ def permutation_test_multi(X,y,n_iter_cv=5,n_iter_p=500):
 	accuracies = np.zeros(X.shape[0])
 	chance_rates = np.zeros(X.shape[0])
 	p_vals = np.zeros(X.shape[0])
+	llr_pvals = np.zeros(X.shape[0])
 	for i in range(len(results)):
 		accuracies[i] = results[i][0]
 		p_vals[i] = results[i][2]
 		chance_rates[i] = results[i][1]
-	return accuracies,chance_rates,p_vals
+		llr_pvals[i] = results[i][3]
+	return accuracies,chance_rates,p_vals,llr_pvals
 
 """
 A helper function to make a non-binary array

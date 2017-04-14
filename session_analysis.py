@@ -73,7 +73,7 @@ def log_regress_session(f_behavior,f_ephys,win=500,smooth_method='gauss',
 			##now re-arrange the X_data so it's units x trials x bins
 			X_all = np.transpose(X_all,(1,0,2))
 			##now we can run the regression
-			accuracies,chance_rates,pvals = lr3.permutation_test_multi(X_all,y_all)
+			accuracies,chance_rates,pvals,llr_pvals = lr3.permutation_test_multi(X_all,y_all)
 			##finally, we can save these data
 			print("Saving...")
 			f_out = h5py.File(save_path,'a')
@@ -83,6 +83,7 @@ def log_regress_session(f_behavior,f_ephys,win=500,smooth_method='gauss',
 			group.create_dataset("pvals",data=pvals)
 			group.create_dataset("X",data=X_all)
 			group.create_dataset("is_"+ts_ids[1],data=y_all)
+			group.create_dataset('llr_pvals',data=llr_pvals)
 			f_out.close()
 			print("Done")
 		print("Session complete")
