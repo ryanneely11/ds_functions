@@ -8,6 +8,7 @@ import parse_ephys as pe
 import regression as re
 import file_lists
 import log_regression2 as lr2
+import log_regression3 as lr3
 import os
 import h5py
 from functools import reduce
@@ -67,13 +68,14 @@ def log_regress_session(f_behavior,f_ephys,window=500,smooth_method='gauss',
 				y_all.append(y_data)
 				y_strings_all.append(y_strings)
 			##concatenate data
+			X_all = ptr.remove_nan_units(X_all)
 			X_all = np.concatenate(X_all,axis=0)
 			y_all = np.concatenate(y_all,axis=0)
 			y_strings_all = np.concatenate(y_strings_all,axis=0)
 			##now re-arrange the X_data so it's units x trials x bins
 			X_all = np.transpose(X_all,(1,0,2))
 			##now we can run the regression
-			accuracies,chance_rates,pvals = lr2.permutation_test_multi(X_all,y_all)
+			accuracies,chance_rates,pvals = lr3.permutation_test_multi(X_all,y_all)
 			##finally, we can save these data
 			print("Saving...")
 			f_out = h5py.File(save_path,'a')
