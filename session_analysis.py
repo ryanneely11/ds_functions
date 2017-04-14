@@ -66,12 +66,10 @@ def log_regress_session(f_behavior,f_ephys,window=500,smooth_method='gauss',
 				y_strings[:] = name
 				X_all.append(X_data)
 				y_all.append(y_data)
-				y_strings_all.append(y_strings)
 			##concatenate data
 			X_all = ptr.remove_nan_units(X_all)
 			X_all = np.concatenate(X_all,axis=0)
 			y_all = np.concatenate(y_all,axis=0)
-			y_strings_all = np.concatenate(y_strings_all,axis=0)
 			##now re-arrange the X_data so it's units x trials x bins
 			X_all = np.transpose(X_all,(1,0,2))
 			##now we can run the regression
@@ -84,7 +82,7 @@ def log_regress_session(f_behavior,f_ephys,window=500,smooth_method='gauss',
 			group.create_dataset("chance_rates",data=chance_rates)
 			group.create_dataset("pvals",data=pvals)
 			group.create_dataset("X",data=X_all)
-			group.create_dataset("y",data=y_strings_all)
+			group.create_dataset("is_"+ts_ids[1],data=y_all)
 			f_out.close()
 			print("Done")
 		print("Session complete")
