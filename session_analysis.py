@@ -14,7 +14,7 @@ from functools import reduce
 import dpca
 import os
 
-save_root = os.path.join(file_lists.save_loc,"LogisticRegression/30ms_gauss_0.05")
+save_root = os.path.join(file_lists.save_loc,"LogisticRegression/50ms_bins_0.05")
 
 """
 A session to run logistic regression on pairs of task variables. Output is to 
@@ -38,57 +38,8 @@ def log_regress_session(f_behavior,f_ephys,window=500,smooth_method='gauss',
 	##open a file to save the data
 	save_path = os.path.join(save_root,f_behavior[-11:-9],f_behavior[-11:-5]+".hdf5")
 	##create the file
-<<<<<<< HEAD
 	try:
 		f_out = h5py.File(save_path,'x')
-=======
-	f_out = h5py.File(save_path,'a')
-	f_out.close()
-	for event in list(event_pairs):
-		print("Computing regression on "+event+" trials...")
-		##get all of the event pairs	
-		##start by getting the list of event pairs
-		ts_ids = event_pairs[event]
-		##create a custom window depending on the epoch we are interested in
-		if event == 'context' or event == 'action':
-			window = [window,50] ##we'll pad with 50 ms just in case
-		elif event == 'outcome':
-			window = [50,window]
-		##now get the data arrays for each of the event types
-		X_all = []
-		y_all = []
-		y_strings_all = []
-		for i,name in enumerate(ts_ids):
-			X_data = ptr.get_event_spikes(f_behavior,f_ephys,name,window=window,
-				smooth_method=smooth_method,smooth_width=smooth_width,z_score=z_score,
-				min_rate=min_rate)
-			##now create label data for this set
-			y_data = np.ones(X_data.shape[0])*i
-			y_strings = np.empty(X_data.shape[0],dtype='<U19')
-			y_strings[:] = name
-			X_all.append(X_data)
-			y_all.append(y_data)
-			y_strings_all.append(y_strings)
-		##get rid of low-spike rate neurons (which have been converted to nan)
-		X_all = ptr.remove_nan_units(X_all)
-		##concatenate data
-		X_all = np.concatenate(X_all,axis=0)
-		y_all = np.concatenate(y_all,axis=0)
-		y_strings_all = np.concatenate(y_strings_all,axis=0)
-		##now re-arrange the X_data so it's units x trials x bins
-		X_all = np.transpose(X_all,(1,0,2))
-		##now we can run the regression
-		accuracies,chance_rates,pvals = lr3.permutation_test_multi(X_all,y_all)
-		##finally, we can save these data
-		print("Saving...")
-		f_out = h5py.File(save_path,'a')
-		group = f_out.create_group(event)
-		group.create_dataset("accuracies",data=accuracies)
-		group.create_dataset("chance_rates",data=chance_rates)
-		group.create_dataset("pvals",data=pvals)
-		group.create_dataset("X",data=X_all)
-		group.create_dataset("y",data=y_strings_all)
->>>>>>> 2ab76d30942197c75e0bbd2b1c14648918c088be
 		f_out.close()
 		for event in list(event_pairs):
 			print("Computing regression on "+event+" trials...")
