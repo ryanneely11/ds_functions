@@ -65,6 +65,8 @@ def log_regress_session(f_behavior,f_ephys,window=500,smooth_method='gauss',
 			X_all.append(X_data)
 			y_all.append(y_data)
 			y_strings_all.append(y_strings)
+		##get rid of low-spike rate neurons (which have been converted to nan)
+		X_all = ptr.remove_nan_units(X_all)
 		##concatenate data
 		X_all = np.concatenate(X_all,axis=0)
 		y_all = np.concatenate(y_all,axis=0)
@@ -72,7 +74,7 @@ def log_regress_session(f_behavior,f_ephys,window=500,smooth_method='gauss',
 		##now re-arrange the X_data so it's units x trials x bins
 		X_all = np.transpose(X_all,(1,0,2))
 		##now we can run the regression
-		accuracies,chance_rates,pvals = lr2.permutation_test_multi(X_all,y_all)
+		accuracies,chance_rates,pvals = lr3.permutation_test_multi(X_all,y_all)
 		##finally, we can save these data
 		print("Saving...")
 		f_out = h5py.File(save_path,'a')
