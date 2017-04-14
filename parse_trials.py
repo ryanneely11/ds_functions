@@ -21,7 +21,7 @@ Returns:
 	-X data array in shape n_units x n_trials x b_bins
 """
 def get_event_spikes(f_behavior,f_ephys,event_name,window=[400,0],
-	smooth_method='gauss',smooth_width=30,z_score=True,min_rate=0.1):
+	smooth_method='gauss',smooth_width=30,z_score=True,min_rate=0.1,nan=True):
 	##start by getting the parsing the behavior timestamps
 	ts = pt.get_event_data(f_behavior)[event_name]
 	##get the spike data for the full session
@@ -34,7 +34,7 @@ def get_event_spikes(f_behavior,f_ephys,event_name,window=[400,0],
 	##now get the data windows
 	X_trials = pe.X_windows(X_raw,windows) ##this is a LIST, not an array
 	##get rid of really low rate units
-	X_trials = remove_low_rate_units(X_trials,min_rate)
+	X_trials = remove_low_rate_units(X_trials,min_rate,nan=nan)
 	##NOW we can do smoothing and z-scoring
 	if smooth_method != 'none':
 		for t in range(len(X_trials)):
@@ -416,11 +416,12 @@ Inputs:
 	X_trials: a list or array of binary array of spike data, in shape 
 		trials x (units x bins). Assumes 1-ms binning!
 	min_rate: minimum spike rate, in Hz
+	nan: if True, replaces low spiking unit data with np.nan, but doesn't remove
 Returns:
 	X_trials: same array with data removed from units that don't meet the min
 		spike rate requirements
 """
-def remove_low_rate_units(X_trials,min_rate=0.1):
+def remove_low_rate_units(X_trials,min_rate=0.1,nan=False):
 	##copy data into a new list, so we retain compatibility with arrays
 	X_clean = []
 	for i in range(len(X_trials)):
@@ -441,7 +442,30 @@ def remove_low_rate_units(X_trials,min_rate=0.1):
 	##now get rid of the units, if any
 	if remove.size > 0:
 		for t in range(n_trials):
-			X_clean[t] = np.delete(X_clean[t],remove,axis=0)
+			if nan:
+				X_clean[t][remove,:] = np.nan
+			else:
+				X_clean[t] = np.delete(X_clean[t],remove,axis=0)
 	return X_clean
+
+"""
+A helper function to remove nan-ed unit data from two or more sets of
+trial data.
+Inputs:
+	X_all: a list of trials data
+returns:
+	X_clean: a list of trials data with nan units removed from all sets
+"""
+def remove_nan_units(X_all):
+	##the indices of units to remove
+	to_remove = []
+	for i in range(len(X_all)):
+		to_remove.append(np.where(np.isnan(X_all[i].mean(axis=0).mean(axis=1)))[0])
+	to_remove = np.concatenate(to_remove)
+	X_clean = []
+	for i in range(len(X_all)):
+		X_clean.append(np.delete(X_all[i],to_remove,axis=1))
+	return X_clean
+
 
 
