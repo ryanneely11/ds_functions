@@ -14,8 +14,202 @@ import h5py
 from functools import reduce
 import dpca
 import os
+import pandas as pd
 
-save_root = os.path.join(file_lists.save_loc,"LogisticRegression/50ms_bins_0.05")
+save_root = os.path.join(file_lists.save_loc,"LogisticRegression/gauss_40_ms_bins")
+
+"""
+A function to parse the results of a logistic regression. 
+Inputs: 
+	f_data: file path to a hdf5 file with logistic regression data
+	sig_level: p-value threshold for significance
+	test_type: string; there should be two statistucs; a log-liklihood ratio p-val
+		from the fit from statsmodels ('llrp_pvals'), and a p-val from doing permutation
+		testing with shuffled data ('pvals'). This flag lets you select which one to use.
+Returns:
+	results: a dictionary with the results
+"""
+def parse_log_regression2(f_data,sig_level=0.05,test_type='llr_pvals'):
+	global event_pairs
+	##open the file
+	f = h5py.File(f_data,'r')
+	results = {}
+	##now we want to just get data from units that encode something significantly
+	conditions = list(f)
+	##look at data from each condition
+	for c in conditions:
+		results[c] = {}
+		##find the indices of units that are significant here
+		sig_idx = np.where(np.asarray(f[c][test_type])<sig_level)[0]
+		##only continue if there are any sig units
+		if sig_idx.size > 0:
+			results[c]['idx'] = sig_idx
+			results[c]['pvals'] = np.asarray(f[c][test_type])[sig_idx]
+			results[c]['accuracy'] = np.asarray(f[c]['accuracies'])[sig_idx]
+			results[c]['chance'] = np.asarray(f[c]['chance_rates'])[sig_idx]
+			##get the trials of each type for this context
+			##first we need to figure out the labels
+			labels = [x for x in list(f[c]) if x.startswith('is_')]
+			labels[0] = labels[0][3:] ##the first one is the 1's in the y-array
+			labels.append([y for y in event_pairs[c] if not y == labels[0]][0])
+			##now reverse so it matches (see below)
+			labels.reverse()
+			##the second label corresponds the the 0's in the y-array
+			##now we can get the traces for each event type in this condition
+			##(just subsets of our X-array)
+			for i, label in enumerate(labels):
+				event_idx = np.where(np.asarray(f[c]['is_'+labels[-1]])==i)[0]
+				results[c][label] = event_idx ## the indices for this event
+			##finally, just add the X-data
+			results[c]['X'] = np.asarray(f[c]['X'])
+	f.close()
+	return results
+
+"""
+A function to parse the results of a logistic regression, and extract some
+good examples of units with different encoding properties. 
+Inputs: 
+	f_data: file path to a hdf5 file with logistic regression data
+	sig_level: p-value threshold for significance
+	test_type: string; there should be two statistucs; a log-liklihood ratio p-val
+		from the fit from statsmodels ('llrp_pvals'), and a p-val from doing permutation
+		testing with shuffled data ('pvals'). This flag lets you select which one to use.
+	accuracy_thresh: the threshold to use when considering candidate units
+Returns:
+	results: a dictionary with the results
+"""
+def get_log_regression_samples(f_data,sig_level=0.05,test_type='llr_pvals',accuracy_thresh=0.8):
+	global event_pairs
+	##open the file
+	f = h5py.File(f_data,'r')
+	results = {}
+	##now we want to just get data from units that encode something significantly
+	conditions = list(f)
+	##look at data from each condition
+	for c in conditions:
+		results[c] = {}
+		##find the indices of units that are significant here
+		sig_idx = np.where(np.asarray(f[c][test_type])<sig_level)[0]
+		##only continue if there are any sig units
+		if sig_idx.size > 0:
+			results[c]['idx'] = sig_idx
+			results[c]['pvals'] = np.asarray(f[c][test_type])[sig_idx]
+			results[c]['accuracy'] = np.asarray(f[c]['accuracies'])[sig_idx]
+			results[c]['chance'] = np.asarray(f[c]['chance_rates'])[sig_idx]
+			##get the trials of each type for this context
+			##first we need to figure out the labels
+			labels = [x for x in list(f[c]) if x.startswith('is_')]
+			labels[0] = labels[0][3:] ##the first one is the 1's in the y-array
+			labels.append([y for y in event_pairs[c] if not y == labels[0]][0])
+			##now reverse so it matches (see below)
+			labels.reverse()
+			##the second label corresponds the the 0's in the y-array
+			##now we can get the traces for each event type in this condition
+			##(just subsets of our X-array)
+			for i, label in enumerate(labels):
+				event_idx = np.where(np.asarray(f[c]['is_'+labels[-1]])==i)[0]
+				results[c][label] = event_idx ## the indices for this event
+			##finally, just add the X-data
+			results[c]['X'] = np.asarray(f[c]['X'])
+	f.close()
+	##now work out which units encode what
+	sig_idx = []
+	for epoch in conditions:
+		try:
+			sig_idx.append(results[epoch]['idx'])
+		except KeyError: ##case where there were no sig units in this epoch
+			pass
+	sig_idx = np.unique(np.concatenate(sig_idx)) ##unique gets rid of any duplicates
+	##create a dataframe to store info about which units encode what
+	encode_data = pd.DataFrame(columns=conditions,index=sig_idx)
+	cursor = 0
+	for epoch in conditions:
+		try:
+			epoch_sig = results[epoch]['idx'] ##the indices of significant units in this epoch
+			for i,unitnum in enumerate(epoch_sig):
+				##we know all units meet significance criteria, so just save the accuracy
+				encode_data[epoch][unitnum] = results[epoch]['accuracy'][i]
+		except KeyError: ##no sig units in this epoch
+			pass
+	##now let's set up a dictionary where we can store examplary unit IDs
+	example_units = {
+	'action_only':[],
+	'action+context':[],
+	'context_only':[],
+	'context+outcome':[],
+	'outcome_only':[],
+	'outcome+action':[],
+	'outcome+action+context':[]
+	}
+	for i in sig_idx:
+		line = encode_data.loc[i]
+		if not np.isnan(line['action']) and (np.isnan(line['context']) and np.isnan(line['outcome'])):
+			##case where it's action-only
+			if line['action'] >= accuracy_thresh:
+				example_units['action_only'].append(i)
+		elif (not np.isnan(line['action']) and not np.isnan(line['context'])) and np.isnan(line['outcome']):
+			##case wher it's action and context
+			if line['action'] >= accuracy_thresh and line['context'] >= accuracy_thresh:
+				example_units['action+context'].append(i)
+		elif not np.isnan(line['context']) and (np.isnan(line['action']) and np.isnan(line['outcome'])):
+			##case where it's context-only
+			if line['context'] >= accuracy_thresh:
+				example_units['context_only'].append(i)
+		elif (not np.isnan(line['context']) and not np.isnan(line['outcome'])) and np.isnan(line['action']):
+			##case where it's context and outcome
+			if line['outcome'] >= accuracy_thresh and line['context'] >= accuracy_thresh:
+				example_units['context+outcome'].append(i)
+		elif not np.isnan(line['outcome']) and (np.isnan(line['action']) and np.isnan(line['context'])):
+			if line['outcome'] >= accuracy_thresh:
+				example_units['outcome_only'].append(i)
+		elif (not np.isnan(line['outcome']) and not np.isnan(line['action'])) and np.isnan(line['context']):
+			##case where it's action and outcome
+			if line['action'] >= accuracy_thresh and line['outcome'] >= accuracy_thresh:
+				example_units['outcome+action'].append(i)
+		elif (not np.isnan(line['outcome']) and not np.isnan(line['action']) and not np.isnan(line['context'])):
+			##case where it encodes all 3
+			if line['action'] >= accuracy_thresh and line['context'] >= accuracy_thresh and line['outcome'] >= accuracy_thresh:
+				example_units['outcome+action+context'].append(i)
+		else:
+			print("Warning: no catagory found for unit "+str(i))
+	##now we know what units we can get data from, so let's save the actual spike data for each possible 
+	##condition for each of these units.
+	##another dictionary to store the data:
+	data_dict = {
+	'action_only':{},
+	'action+context':{},
+	'context_only':{},
+	'context+outcome':{},
+	'outcome_only':{},
+	'outcome+action':{},
+	'outcome+action+context':{}
+	}
+	##now get the indices of all the different trial types
+	trial_idx = {}
+	for epoch in event_pairs:
+		events = event_pairs[epoch]
+		for event in events:
+			trial_idx[event] = results[epoch][event]
+	for t in list(data_dict):
+		for e in list(trial_idx):
+			data_dict[t][e] = []
+	##now get the data
+	for unit_type in list(example_units):
+		unit_nums = example_units[unit_type]
+		if len(unit_nums)>0:
+			for unit in unit_nums:
+				##get all the trails for each trial type for this unit
+				for epoch in event_pairs:
+					X_epoch = results[epoch]['X']
+					for event in event_pairs[epoch]:
+						event_idx = list(trial_idx[event])
+						X_event = X_epoch[unit,event_idx,:]
+						data_dict[unit_type][event].append(X_event)
+	return data_dict
+
+
+
+
 
 """
 A session to run logistic regression on pairs of task variables. Output is to 

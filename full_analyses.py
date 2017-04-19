@@ -12,6 +12,10 @@ import h5py
 import PCA
 import glob
 import dpca
+import pandas as pd
+
+
+
 
 """
 A function to run logistic regression using the new functions in lr2.
@@ -384,57 +388,55 @@ directories, so it will analyze one or more animals. Function looks for hdf5 fil
 so any hdf5 files in the directories should only be regression results files.
 Inputs:
 	dir_list: list of directories where data is stored.
-	epochs: list, optional. If you only want to take data from certain epochs.
 Returns:
 	results: dictionary of results for each directory (animal)
 """
-def analyze_log_regressions(dir_list,epochs=None):
+def analyze_log_regressions(dir_list,session_range=None,sig_level=0.05,test_type='llr_pvals'):
 	##assume the folder name is the animal name, and that it is two characters
-	##also assuming that we are looking at the following conditions:
-	##set up the results dictionary
-	results = {
-		'num_block_type':[],
-		'num_choice':[],
-		'num_reward':[],
-		'multi_units':[],
-		'num_sig':[],
-		'num_total':[]}
+	##set up a results dictionary
+	epochs = ['action','context','outcome'] ##this could change in future implementations
+	##create a dataframe object to store all of the data across sessions/animals
+	all_data = pd.DataFrame(columns=epochs)
+	cursor = 0 #keep track of how many units we're adding to the dataframe
 	for d in dir_list:
-		name = d[-11:-9]
 		##get the list of files in this directory
 		flist = get_file_names(d)
 		flist.sort() ##get them in order of training session
-		n_bt = np.zeros(len(flist)) ##these are the arrays to go into the results lists
-		n_c = np.zeros(len(flist))
-		n_r = np.zeros(len(flist))
-		n_mu = np.zeros(len(flist))
-		n_s = np.zeros(len(flist))
-		n_t = np.zeros(len(flist))
-		for n,f in enumerate(flist):
+		##take only the requested sessions, if desired
+		if session_range is not None:
+			flist = flist[session_range[0]:session_range[1]]
+		for f in flist:
 			##parse the results for this file
-			cond_idx,cond_ps,multis,n_sig,n_total = sa.parse_log_regression(f,epochs)
-			##add the data to the arrays
-			n_bt[n] = cond_idx['block_type'].size
-			n_c[n] = cond_idx['choice'].size
-			n_r[n] = cond_idx['reward'].size
-			n_mu[n] = multis.size
-			n_s[n] = n_sig.size
-			n_t[n] = n_total
-		##now add the data to the master lists
-		results['num_block_type'].append(n_bt)
-		results['num_choice'].append(n_c)
-		results['num_reward'].append(n_r)
-		results['multi_units'].append(n_mu)
-		results['num_sig'].append(n_s)
-		results['num_total'].append(n_t)	
-	##now get these all into a pretty array
-	results['num_block_type'] = equalize_arrs(results['num_block_type'])
-	results['num_choice'] = equalize_arrs(results['num_choice'])
-	results['num_reward'] = equalize_arrs(results['num_reward'])
-	results['multi_units'] = equalize_arrs(results['multi_units'])
-	results['num_sig'] = equalize_arrs(results['num_sig'])
-	results['num_total'] = equalize_arrs(results['num_total'])
-	return results
+			results = sa.parse_log_regression2(f,sig_level=sig_level,test_type=test_type)
+			##get an array of EVERY significant unit across all epochs
+			sig_idx = []
+			for epoch in epochs:
+				try:
+					sig_idx.append(results[epoch]['idx'])
+				except KeyError: ##case where there were no sig units in this epoch
+					pass
+			sig_idx = np.unique(np.concatenate(sig_idx)) ##unique gets rid of any duplicates
+			##construct a pandas dataframe object to store the data form this session
+			global_idx = np.arange(cursor,cursor+sig_idx.size) ##the index relative to all the other data so far
+			data = pd.DataFrame(columns=epochs,index=global_idx)
+			##now run through each epoch, and add data to the local dataframe
+			for epoch in epochs:
+				try:
+					epoch_sig = results[epoch]['idx'] ##the indices of significant units in this epoch
+					for i,unitnum in enumerate(epoch_sig):
+						#get the index of this unitnumber in reference to the local dataframe
+						unit_idx = np.argwhere(sig_idx==unitnum)[0][0] ##first in the master sig list
+						unit_idx = global_idx[unit_idx]
+						##we know all units meet significance criteria, so just save the accuracy
+						data[epoch][unit_idx] = results[epoch]['accuracy'][i]
+				except KeyError: ##no sig units in this epoch
+					pass
+			all_data = all_data.append(data)
+			cursor += sig_idx.size
+	return all_data
+
+
+
 
 
 """

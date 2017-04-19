@@ -17,6 +17,241 @@ import session_analysis as sa
 import matplotlib as ml
 import dpca
 from scipy import stats
+from matplotlib import cm
+import matplotlib
+import collections
+
+"""
+A function to plot examplar units from logistic regression, from one session at a time.
+Inputs:
+	f_data: file path to a hdf5 file with logistic regression data
+	sig_level: p-value threshold for significance
+	test_type: string; there should be two statistucs; a log-liklihood ratio p-val
+		from the fit from statsmodels ('llrp_pvals'), and a p-val from doing permutation
+		testing with shuffled data ('pvals'). This flag lets you select which one to use.
+	accuracy_thresh: the threshold to use when considering candidate units
+"""
+def plot_example_log_units(f_data,sig_level=0.05,test_type='pvals',accuracy_thresh=0.8,sample_ms=40):
+	global color_lut
+	##get the data in dictionary form
+	data = sa.get_log_regression_samples(f_data,sig_level=sig_level,test_type=test_type,
+		accuracy_thresh=accuracy_thresh)
+	##get the different flavors of encoding
+	encoding_types = list(data)
+	for t in encoding_types:
+		##get some info about the data here
+		event_types = list(data[t])
+		n_units = len(data[t][event_types[0]])
+		##proceed if there are units to plot
+		if n_units > 0:
+			n_samples = data[t][event_types[0]][0].shape[1]
+			##make a figure for this unit
+			for u in range(n_units):
+				fig,axes = plt.subplots(1,3)
+				fig.suptitle(t,fontsize=14,weight='bold')
+				for i,epoch in enumerate(list(sa.event_pairs)):
+					ax = axes[i]
+					events = sa.event_pairs[epoch]
+					if epoch == 'outcome':
+						x = np.arange(-sample_ms,(n_samples-1)*sample_ms,sample_ms)
+					else:
+						x = np.arange(-sample_ms*(n_samples-2),sample_ms*2,sample_ms)
+					for j,e in enumerate(events):
+						mean, upper, lower = mean_and_sem(data[t][e][u])
+						ax.plot(x,mean,linewidth=2,color=color_lut[epoch][j],label=e)
+						ax.fill_between(x,lower,upper,color=color_lut[epoch][j],alpha=0.5)
+					ax.vlines(0,ax.get_ylim()[0],ax.get_ylim()[1],color='k',linewidth=2,linestyle='dashed')
+					if i == 0:
+						ax.set_ylabel("Firing rate, z-score",fontsize=14,weight='bold')
+					ax.set_xlabel("Samples",fontsize=14,weight='bold')
+					for tick in ax.xaxis.get_major_ticks():
+						tick.label.set_fontsize(14)
+					for tick in ax.yaxis.get_major_ticks():
+						tick.label.set_fontsize(14)
+					ax.set_title(epoch,fontsize=14,weight='bold')
+					ax.legend()
+
+
+
+
+
+"""
+A function to plot logistic regression data for all sessions, looking specifically
+at whether units encode more than one parameter.
+"""
+def plot_log_units_all2(dir_list=None,session_range=None,sig_level=0.05,test_type='llr_pval',cmap='brg'):
+	##coding this in just to save time
+	if dir_list == None:
+		dir_list = [
+		"/Volumes/Untitled/Ryan/DS_animals/results/LogisticRegression/40ms_bins_0.05/S1",
+		"/Volumes/Untitled/Ryan/DS_animals/results/LogisticRegression/40ms_bins_0.05/S2",
+		"/Volumes/Untitled/Ryan/DS_animals/results/LogisticRegression/40ms_bins_0.05/S3"
+		]
+	##get the data
+	results = fa.analyze_log_regressions(dir_list,session_range=session_range,sig_level=sig_level,
+		test_type=test_type)
+	epochs = list(results.columns)
+	##we'll sort everything by the first epoch
+	n_units = results.index.max()
+	##parse the data according to which units encode what param
+	data = np.zeros(n_units)
+	for i in range(n_units):
+		line = results.loc[i]
+		if not np.isnan(line['action']) and (np.isnan(line['context']) and np.isnan(line['outcome'])):
+			##case where it's action-only
+			data[i] = 0
+		elif (not np.isnan(line['action']) and not np.isnan(line['context'])) and np.isnan(line['outcome']):
+			##case wher it's action and context
+			data[i] = 1
+		elif not np.isnan(line['context']) and (np.isnan(line['action']) and np.isnan(line['outcome'])):
+			##case where it's context-only
+			data[i] = 2
+		elif (not np.isnan(line['context']) and not np.isnan(line['outcome'])) and np.isnan(line['action']):
+			##case where it's context and outcome
+			data[i] = 3
+		elif not np.isnan(line['outcome']) and (np.isnan(line['action']) and np.isnan(line['context'])):
+			##case where it's outcome-only
+			data[i] = 4
+		elif (not np.isnan(line['outcome']) and not np.isnan(line['action'])) and np.isnan(line['context']):
+			##case where it's action and outcome
+			data[i] = 5
+		elif (not np.isnan(line['outcome']) and not np.isnan(line['action']) and not np.isnan(line['context'])):
+			##case where it encodes all 3
+			data[i] = 6
+		else:
+			print("Warning: no catagory found for unit "+str(i))
+	##now sort them all in order
+	sort_idx = np.argsort(data)
+	data = data[sort_idx]
+	##determine the size of the image matrix based on the number of units
+	side_len = np.ceil(np.sqrt(n_units)).astype(int)
+	##set up the figure with GridSpec
+	fig = plt.figure()
+	vmax = 6 ##store the global max an min prediction strengths so we can scale all plots equally
+	vmin = 0
+	##produce an image matrix of NaNs (should be white); these will later be filled with 
+	##sig unit values when appropriate
+	img_mat = np.empty((side_len,side_len))
+	img_mat[:] = np.nan
+	##fill the image matrix with values from the sig units
+	for s in range(n_units):
+		##fill the image matrix spot for this unit
+		c,r = rc_idx(s,side_len)
+		img_mat[r,c] = data[s]
+		##now plot the image matrix
+	ax = fig.add_subplot(111)
+	ax.set_title("Encoding for all units",fontsize=14,weight='bold')
+	ax.set_ylabel("Units",fontsize=14,weight='bold')
+	ax.set_xlabel("Units",fontsize=14,weight='bold')
+	##turn off the x and y labels
+	ax.set_xticklabels([])
+	ax.set_yticklabels([])
+	##plot the actual data
+	ax.imshow(img_mat,interpolation='none',cmap=cmap)
+	for j in range(n_units):
+		r,c = rc_idx(j,side_len)
+		ax.text(r,c,str(j+1),fontsize=4)
+	##add a legend, using the colormap values. There's probably a more elegant way to do this without 
+	##making fake lines, but whatev
+	labeldict = {
+	'Action\nonly':0,'Action +\ncontext':1,'Context\nonly':2,'Context +\noutcome':3,
+	'Outcome\nonly':4,'Outcome +\naction':5,'Action+ \noutcome +\ncontext':6}
+	lines = []
+	for label in list(labeldict):
+		lines.append(matplotlib.lines.Line2D([],[],color=cm.brg(labeldict[label]/6.0),markersize=100,label=label))
+	labels = [h.get_label() for h in lines] 
+	ax.legend(handles=lines,labels=labels,bbox_to_anchor=(0,1))
+	##let's also make a bar graph out of this
+	bar_dict = {}
+	for key in list(labeldict):
+		bar_dict[key] = (data==labeldict[key]).sum()/float(n_units)
+	x = np.arange(len(bar_dict))
+	fig2 = plt.figure()
+	ax2 = fig2.add_subplot(111)
+	bars = ax2.bar(x,list(bar_dict.values()),align='center',width=0.5)
+	for i in x:
+		label = labels[i]
+		bars[i].set_color(cm.brg(labeldict[label]/6.0))
+	ax2.set_xticks(x)
+	ax2.set_xticklabels(list(bar_dict),rotation=45,weight='bold',fontsize=10)
+	ax2.set_ylabel('Percent of significant units',fontsize=14,weight='bold')
+	ax2.set_title("Proportion of units encoding task params",fontsize=14,weight='bold')
+
+
+
+"""
+A function to plot logistic regression data for all sessions.
+"""
+def plot_log_units_all(dir_list=None,session_range=None,sig_level=0.05,test_type='llr_pval'):
+	##coding this in just to save time
+	if dir_list == None:
+		dir_list = [
+		"/Volumes/Untitled/Ryan/DS_animals/results/LogisticRegression/50ms_bins_0.05/S1",
+		"/Volumes/Untitled/Ryan/DS_animals/results/LogisticRegression/50ms_bins_0.05/S2",
+		"/Volumes/Untitled/Ryan/DS_animals/results/LogisticRegression/50ms_bins_0.05/S3"
+		]
+	##get the data
+	results = fa.analyze_log_regressions(dir_list,session_range=session_range,sig_level=sig_level,
+		test_type=test_type)
+	##the different epochs
+	epochs = list(results.columns)
+	##we'll sort everything by the first epoch
+	n_units = results.index.max()
+	##we have to do a little trick, because NaN's are ignored normally (we want to sort them)
+	to_sort = np.nan_to_num(list(np.asarray(results[epochs[0]])))
+	sort_idx = np.argsort(to_sort)[::-1][:n_units]
+	##determine the size of the image matrix based on the number of units
+	side_len = np.ceil(np.sqrt(n_units)).astype(int)
+	##set up the figure with GridSpec
+	fig = plt.figure()
+	gs = gridspec.GridSpec(1,len(epochs),wspace=0,hspace=0)
+	##a list to store all the image plots
+	cplots = []
+	vmax = 0 ##store the global max an min prediction strengths so we can scale all plots equally
+	vmin = 0.5
+	##residual from copied code
+	m = 0
+	##outer loop is for plotting epochs (columns)
+	for n, epoch in enumerate(epochs):
+		##produce an image matrix of NaNs (should be white); these will later be filled with 
+		##sig unit values when appropriate
+		img_mat = np.empty((side_len,side_len))
+		img_mat[:] = np.nan
+		##now we need to get the data for this set.
+		data = np.asarray(results[epoch])[sort_idx]
+		##fill the image matrix with accuracy values from the sig units
+		for s in range(n_units):
+			k = data[s] ##the strength of the prediction for this unit
+			if k > vmax:
+				vmax = k
+			if k < vmin:
+				vmin = k
+			##fill the image matrix spot for this unit
+			c,r = rc_idx(s,side_len)
+			img_mat[r,c] = k
+		##now plot the image matrix
+		ax = plt.subplot(gs[0,n])
+		ax.set_title(epoch,fontsize=14,weight='bold')
+		##if it's the first column, add a y-axis label
+		if n == 0:
+			ax.set_ylabel("Units",fontsize=14,weight='bold')
+		ax.set_xlabel("Units",fontsize=14,weight='bold')
+		##turn off the x and y labels
+		ax.set_xticklabels([])
+		ax.set_yticklabels([])
+		##plot the actual data
+		cplots.append(ax.imshow(img_mat,interpolation='none',cmap='summer'))
+		for j in range(n_units):
+			r,c = rc_idx(j,side_len)
+			ax.text(r,c,str(j+1),fontsize=4)
+	##rescale all plots to the same range
+	for cp in cplots:
+		cp.set_clim(vmin=vmin,vmax=vmax)
+	##add a colorbar 
+	cbaxes = fig.add_axes([0.05, 0.15, 0.9, 0.025])
+	cb = fig.colorbar(cax=cbaxes,mappable=cplots[0],orientation='horizontal')
+	cbaxes.set_xlabel("Prediction accuracy",fontsize=14)
+
 
 """
 A function to plot the reversal curves early VS late.
@@ -967,10 +1202,13 @@ Inputs:
 	y: binary event matrix (1-d)
 	sig_idx: index of units with significant predicability
 """
-def plot_log_units(X,y,sig_idx):
+def plot_log_units(results,condition):
+	data = results[condition]
+	sig_idx = data['idx']
+	X = data['X']
 	##get the indexes of non-sig units
-	nonsig_idx = np.asarray([t for t in range(X.shape[1]) if t not in sig_idx])
-	n_total = X.shape[1]
+	nonsig_idx = np.asarray([t for t in range(X.shape[0]) if t not in sig_idx])
+	n_total = X.shape[0]
 	n_sig = sig_idx.size
 	n_nonsig = n_total - n_sig
 	##determine the number of subplots to use for each catagory
@@ -986,18 +1224,19 @@ def plot_log_units(X,y,sig_idx):
 	sigfig = plt.figure()
 	nonsigfig = plt.figure()
 	##get the indexes of the two different conditions
-	idx_c1 = np.where(y==0)[0]
-	idx_c2 = np.where(y==1)[0]
+	events = [x for x in list(data) if 'lever' in x or 'poke' in x]
+	idx_c1 = data[events[0]]
+	idx_c2 = data[events[1]]
 	##start by plotting the significant figures
 	for n in range(n_sig):
 		idx = sig_idx[n]
 		##the data for this unit
-		c1_mean, c1_h1, c1_h2 = mean_confidence_interval(X[idx_c1,idx,:])
-		c2_mean, c2_h1, c2_h2 = mean_confidence_interval(X[idx_c2,idx,:])
+		c1_mean, c1_h1, c1_h2 = mean_and_sem(X[idx,idx_c1,:])
+		c2_mean, c2_h1, c2_h2 = mean_and_sem(X[idx,idx_c2,:])
 		##the subplot axis for this unit's plot
 		ax = sigfig.add_subplot(sig_rows,5,n+1)
-		ax.plot(c1_mean,color='b',linewidth=2,label='condition 1')
-		ax.plot(c2_mean,color='r',linewidth=2,label='condition 2')
+		ax.plot(c1_mean,color='b',linewidth=2,label=events[0])
+		ax.plot(c2_mean,color='r',linewidth=2,label=events[1])
 		ax.fill_between(np.arange(c1_mean.size),c1_h1,c1_h2,
 			color='b',alpha=0.5)
 		ax.fill_between(np.arange(c2_mean.size),c2_h1,c2_h2,
@@ -1012,17 +1251,17 @@ def plot_log_units(X,y,sig_idx):
 			ax.set_yticklabels([])
 		ax.set_title("Unit "+str(sig_idx[n]),fontsize=12)
 		if n == 0:
-			ax.legend(bbox_to_anchor=(1.2, 1.2))
+			ax.legend(bbox_to_anchor=(0.1, 0.1))
 	##now do the non-significant figures
 	for n in range(n_nonsig):
 		idx = nonsig_idx[n]
 		##the data for this unit
-		c1_mean, c1_h1, c1_h2 = mean_confidence_interval(X[idx_c1,idx,:])
-		c2_mean, c2_h1, c2_h2 = mean_confidence_interval(X[idx_c2,idx,:])
+		c1_mean, c1_h1, c1_h2 = mean_and_sem(X[idx,idx_c1,:])
+		c2_mean, c2_h1, c2_h2 = mean_and_sem(X[idx,idx_c2,:])
 		##the subplot axis for this unit's plot
 		ax = nonsigfig.add_subplot(nonsig_rows,5,n+1)
-		ax.plot(c1_mean,color='b',linewidth=2,label='condition 1')
-		ax.plot(c2_mean,color='r',linewidth=2,label='condition 2')
+		ax.plot(c1_mean,color='b',linewidth=2,label=events[0])
+		ax.plot(c2_mean,color='r',linewidth=2,label=events[1])
 		ax.fill_between(np.arange(c1_mean.size),c1_h1,c1_h2,
 			color='b',alpha=0.5)
 		ax.fill_between(np.arange(c2_mean.size),c2_h1,c2_h2,
@@ -1422,6 +1661,14 @@ def mean_confidence_interval(a, confidence=0.95):
     return m, m-h, m+h
 
 """
+A helper function to calculate the mean and S.E.M. for a set of data
+"""
+def mean_and_sem(a):
+	n = a.shape[0]
+	m, se = np.mean(a,axis=0), scipy.stats.sem(a,axis=0)
+	return m, m-se, m+se
+
+"""
 A helper function to get a column and row value for a square matrix
 given an index referring to the total array size
 Inputs:
@@ -1435,4 +1682,11 @@ def rc_idx(idx,side_len):
 	side_len = int(side_len)
 	row = idx/side_len
 	col = idx%side_len
-	return row,col
+	return int(row),int(col)
+
+color_lut = {
+	'action':['red','blue'],
+	'context':['maroon','cyan'],
+	'outcome':['gold','green']
+}
+
