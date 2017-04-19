@@ -714,14 +714,12 @@ def ao_duration_analysis(f_in):
 	except KeyError:
 		lower_trial_durs = None
 	##get some basic stats
-	fig,(ax,ax2) = plt.subplots(2,1,sharex=True)
+	fig,ax = plt.subplots(1)
 	fig.patch.set_facecolor('white')
 	fig.set_size_inches(10,4)
 	if upper_trial_durs is not None:
 		upper_dur_mean = abs(upper_trial_durs).mean()
 		upper_dur_std = abs(upper_trial_durs).std()
-		##outliers more than 2 std dev
-		upper_outliers = abs(upper_trial_durs[np.where(abs(upper_trial_durs)>3*upper_dur_std)])
 		##get just the successful trials
 		r_idx = np.where(upper_trial_durs>0)
 		r_upper_durs = upper_trial_durs[r_idx]
@@ -735,15 +733,13 @@ def ao_duration_analysis(f_in):
 			linewidth=2,facecolors=('green',),alpha=0.7,label='rewarded upper lever')
 		ax.scatter(u_upper_times,abs(u_upper_durs),color='green',marker='x',s=30,
 			linewidth=2,label='unrewarded upper lever')
-		ax2.scatter(r_upper_times,abs(r_upper_durs),edgecolor='green',marker='o',s=30,
-			linewidth=2,facecolors=('green',),alpha=0.7,label='rewarded upper lever')
-		ax2.scatter(u_upper_times,abs(u_upper_durs),color='green',marker='x',s=30,
-			linewidth=2,label='unrewarded upper lever')		
+		# ax2.scatter(r_upper_times,abs(r_upper_durs),edgecolor='green',marker='o',s=30,
+		# 	linewidth=2,facecolors=('green',),alpha=0.7,label='rewarded upper lever')
+		# ax2.scatter(u_upper_times,abs(u_upper_durs),color='green',marker='x',s=30,
+		# 	linewidth=2,label='unrewarded upper lever')		
 	if lower_trial_durs is not None:
 		lower_dur_mean = abs(lower_trial_durs).mean()
 		lower_dur_std = abs(lower_trial_durs).std()
-		##outliers
-		lower_outliers = abs(lower_trial_durs[np.where(abs(lower_trial_durs)>3*lower_dur_std)])
 		##get just the successful trials
 		r_idx = np.where(lower_trial_durs>0)
 		r_lower_durs = lower_trial_durs[r_idx]
@@ -757,83 +753,83 @@ def ao_duration_analysis(f_in):
 			linewidth=2,facecolors=('red',),alpha=0.7,label='rewarded lower lever')
 		ax.scatter(u_lower_times,abs(u_lower_durs),color='red',marker='x',s=30,
 			linewidth=2,label='unrewarded lower lever')
-		ax2.scatter(r_lower_times,abs(r_lower_durs),edgecolor='red',marker='o',s=30,
-			linewidth=2,facecolors=('red',),alpha=0.7,label='rewarded lower lever')
-		ax2.scatter(u_lower_times,abs(u_lower_durs),color='red',marker='x',s=30,
-			linewidth=2,label='unrewarded lower lever')
-	for label in ax2.xaxis.get_ticklabels()[1::2]:
-		label.set_visible(False)
+		# ax2.scatter(r_lower_times,abs(r_lower_durs),edgecolor='red',marker='o',s=30,
+		# 	linewidth=2,facecolors=('red',),alpha=0.7,label='rewarded lower lever')
+		# ax2.scatter(u_lower_times,abs(u_lower_durs),color='red',marker='x',s=30,
+		# 	linewidth=2,label='unrewarded lower lever')
+	# for label in ax2.xaxis.get_ticklabels()[1::2]:
+	# 	label.set_visible(False)
 	for label in ax.xaxis.get_ticklabels()[1::2]:
 		label.set_visible(False)
-	for label in ax2.xaxis.get_ticklabels()[::2]:
-		label.set_fontsize(14)
+	# for label in ax2.xaxis.get_ticklabels()[::2]:
+	# 	label.set_fontsize(14)
 	for label in ax.xaxis.get_ticklabels()[::2]:
 		label.set_fontsize(14)
-	for label in ax2.yaxis.get_ticklabels()[1::2]:
-		label.set_visible(False)
+	# for label in ax2.yaxis.get_ticklabels()[1::2]:
+	# 	label.set_visible(False)
 	for label in ax.yaxis.get_ticklabels()[1::2]:
 		label.set_visible(False)
-	for label in ax2.yaxis.get_ticklabels()[::2]:
-		label.set_fontsize(14)
+	# for label in ax2.yaxis.get_ticklabels()[::2]:
+	# 	label.set_fontsize(14)
 	for label in ax.yaxis.get_ticklabels()[::2]:
 		label.set_fontsize(14)
-	##if there are outliers, break the axis
-	try:
-		outliers = np.hstack((upper_outliers,lower_outliers))
-	except NameError: ##if we only have one kind of trial
-		if upper_trial_durs is not None:
-			outliers = upper_outliers
-		else:
-			outliers = lower_outliers
-	if outliers.size > 0:
-		ax2.set_ylim(-1,max(2*lower_dur_std,2*upper_dur_std))
-		ax.set_ylim(outliers.min()-5,outliers.max()+10)
-		# hide the spines between ax and ax2
-		ax.spines['bottom'].set_visible(False)
-		ax2.spines['top'].set_visible(False)
-		ax.xaxis.tick_top()
-		ax.tick_params(labeltop='off')  # don't put tick labels at the top
-		ax2.xaxis.tick_bottom()
+	# ##if there are outliers, break the axis
+	# try:
+	# 	outliers = np.hstack((upper_outliers,lower_outliers))
+	# except NameError: ##if we only have one kind of trial
+	# 	if upper_trial_durs is not None:
+	# 		outliers = upper_outliers
+	# 	else:
+	# 		outliers = lower_outliers
+	# if outliers.size > 0:
+	# 	ax2.set_ylim(-1,max(2*lower_dur_std,2*upper_dur_std))
+	# 	ax.set_ylim(outliers.min()-5,outliers.max()+10)
+	# 	# hide the spines between ax and ax2
+	# 	ax.spines['bottom'].set_visible(False)
+	# 	ax2.spines['top'].set_visible(False)
+	# 	ax.xaxis.tick_top()
+	# 	ax.tick_params(labeltop='off')  # don't put tick labels at the top
+	# 	ax2.xaxis.tick_bottom()
 
-		# This looks pretty good, and was fairly painless, but you can get that
-		# cut-out diagonal lines look with just a bit more work. The important
-		# thing to know here is that in axes coordinates, which are always
-		# between 0-1, spine endpoints are at these locations (0,0), (0,1),
-		# (1,0), and (1,1).  Thus, we just need to put the diagonals in the
-		# appropriate corners of each of our axes, and so long as we use the
-		# right transform and disable clipping.
+	# 	# This looks pretty good, and was fairly painless, but you can get that
+	# 	# cut-out diagonal lines look with just a bit more work. The important
+	# 	# thing to know here is that in axes coordinates, which are always
+	# 	# between 0-1, spine endpoints are at these locations (0,0), (0,1),
+	# 	# (1,0), and (1,1).  Thus, we just need to put the diagonals in the
+	# 	# appropriate corners of each of our axes, and so long as we use the
+	# 	# right transform and disable clipping.
 
-		d = .015  # how big to make the diagonal lines in axes coordinates
-		# arguments to pass plot, just so we don't keep repeating them
-		kwargs = dict(transform=ax.transAxes, color='k', clip_on=False)
-		ax.plot((-d, +d), (-d, +d), **kwargs)        # top-left diagonal
-		ax.plot((1 - d, 1 + d), (-d, +d), **kwargs)  # top-right diagonal
+	# 	d = .015  # how big to make the diagonal lines in axes coordinates
+	# 	# arguments to pass plot, just so we don't keep repeating them
+	# 	kwargs = dict(transform=ax.transAxes, color='k', clip_on=False)
+	# 	ax.plot((-d, +d), (-d, +d), **kwargs)        # top-left diagonal
+	# 	ax.plot((1 - d, 1 + d), (-d, +d), **kwargs)  # top-right diagonal
 
-		kwargs.update(transform=ax2.transAxes)  # switch to the bottom axes
-		ax2.plot((-d, +d), (1 - d, 1 + d), **kwargs)  # bottom-left diagonal
-		ax2.plot((1 - d, 1 + d), (1 - d, 1 + d), **kwargs)  # bottom-right diagonal
-	else:
-		fig.delaxes(ax)
-		fig.draw()
-	if outliers.size > 0:
-		legend=ax.legend(frameon=False)
-		try:
-			plt.text(0.2, 0.9,'upper lever mean = '+str(upper_dur_mean),ha='center',
-				va='center',transform=ax.transAxes,fontsize=14)
-		except NameError:
-			pass
-		try:
-			plt.text(0.2, 0.8,'lower lever mean = '+str(lower_dur_mean),ha='center',
-				va='center',transform=ax.transAxes,fontsize=14)
-		except NameError:
-			pass
-	else:
-		legend=ax2.legend(frameon=False)
+	# 	kwargs.update(transform=ax2.transAxes)  # switch to the bottom axes
+	# 	ax2.plot((-d, +d), (1 - d, 1 + d), **kwargs)  # bottom-left diagonal
+	# 	ax2.plot((1 - d, 1 + d), (1 - d, 1 + d), **kwargs)  # bottom-right diagonal
+	# else:
+	# 	fig.delaxes(ax)
+	# 	fig.draw()
+	# if outliers.size > 0:
+	# 	legend=ax.legend(frameon=False)
+	# 	try:
+	# 		plt.text(0.2, 0.9,'upper lever mean = '+str(upper_dur_mean),ha='center',
+	# 			va='center',transform=ax.transAxes,fontsize=14)
+	# 	except NameError:
+	# 		pass
+	# 	try:
+	# 		plt.text(0.2, 0.8,'lower lever mean = '+str(lower_dur_mean),ha='center',
+	# 			va='center',transform=ax.transAxes,fontsize=14)
+	# 	except NameError:
+	# 		pass
+	# else:
+	legend=ax.legend(frameon=False)
 	for label in legend.get_texts():
 		label.set_fontsize('large')
 	legend.get_frame().set_facecolor('none')
-	ax2.set_xlabel("Time in session, s",fontsize=14)
-	ax2.set_ylabel("Trial duration, s",fontsize=14)
+	ax.set_xlabel("Time in session, s",fontsize=14)
+	ax.set_ylabel("Trial duration, s",fontsize=14)
 	fig.suptitle("Duration of trials",fontsize=14)
 
 

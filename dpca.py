@@ -268,7 +268,7 @@ def interp_trials(data,epoch_ts,new_dur):
 	if not np.all(n_neurons==n_neurons[0]):
 		raise ValueError("Trials have different numbers of neurons")
 	xnew = np.arange(new_dur) ##this will be the timebase of the interpolated trials
-	data_new = np.zeros((len(data),n_neurons[0],xnew.shape[0]))
+	data_new = np.zeros((len(data),int(n_neurons[0]),xnew.shape[0]))
 	##now operate on each trial, over this particular epoch
 	for t in range(len(data)):
 		##get the actual data for this trial

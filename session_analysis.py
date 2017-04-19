@@ -16,7 +16,7 @@ import dpca
 import os
 import pandas as pd
 
-save_root = os.path.join(file_lists.save_loc,"LogisticRegression/gauss_40_ms_bins")
+save_root = os.path.join(file_lists.save_loc,"LogisticRegression/80gauss_40ms_bins")
 
 """
 A function to parse the results of a logistic regression. 
