@@ -18,7 +18,7 @@ import pandas as pd
 
 
 """
-A function to run logistic regression using the new functions in lr2.
+A function to run logistic regression using the new functions in lr3.
 	-window: time window to use for analysis, in ms
 	-smooth_method: type of smoothing to use; choose 'bins', 'gauss', or 'none'
 	-smooth_width: size of the bins or gaussian kernel in ms
@@ -167,6 +167,24 @@ def get_p_correct():
 	return master_list
 
 """
+This function returns an array of every trial duration for every animal.
+Inputs:
+	max_duration: maximum allowable duration of trials (anything longer is deleted)
+	session_range: endpoints of a range of session numbers [start,stop] to restrict analysis to (optional)
+Returns:
+	trial_durs: an of trial durations
+"""
+def get_trial_durations(max_duration=5000,session_range=None):
+	all_durations = []
+	if session_range is not None:
+		files = [x for x in file_lists.behavior_files if int(x[-7:-5]) in np.arange(session_range[0],session_range[1])]
+	else:
+		files = file_lists.behavior_files
+	for f_behavior in files:
+		all_durations.append(sa.session_trial_durations(f_behavior,max_duration=max_duration))
+	return np.concatenate(all_durations)
+
+"""
 A function to get a dataset that includes data from all animals and sessions,
 specifically formatted to use in a dPCA analysis.
 Inputs:
@@ -177,209 +195,45 @@ Inputs:
 		before lever press to consider the start of the trial, and an x-ms period of time after
 		reward to consider the end of the trial
 	z_score: if True, z-scores the array
-	timestretch: if True, uses the time stretching function (below) to equate the lengths of all trials.
-	remove_unrew: if True, excludes trials that were correct but unrewarded.
+	balance_trials: if True, equates the number of trials across all conditions by removal
+	min_trials: minimum number of trials required for each trial type. If a session doesn't meet 
+		this criteria, it will be excluded.
 Returns:
-	X_mean: data list of shape n-neurons x condition-1 x condition-2, ... x n-timebins
-	X_trials: data from individual trials: n-trials x n-neurons x condition-1, condition-2, ... x n-timebins.
-		If data is unbalanced (ie different #'s of trials per condition), max dimensions are used and empty
-		spaces are filled with NaN
+	X_c: data from individual trials;
+		 shape n-trials x n-neurons x condition-1 x condition-2, ... x n-timebins
 """
-def get_dpca_dataset(smooth_method='both',smooth_width=[40,50],
-	pad=[200,200],z_score=True,remove_unrew=True):
+def get_dpca_dataset(conditions,smooth_method='both',smooth_width=[80,40],pad=[400,400],
+	z_score=True,max_duration=5000,min_rate=0.1,balance=True,min_trials=15):
 	##a container to store all of the X_trials data
 	X_all = []
-	ts_all = []
-	ts_idx_all = None
-	##some metrics to help us keep track of things
-	max_trials = 0
-	n_neurons = 0
-	for f_behavior,f_ephys in zip(file_lists.behavior_files,file_lists.ephys_files):
+	##the first step is to determine the median trial length for all sessions
+	med_duration = np.median(get_trial_durations(max_duration=max_duration,session_range=None)).astype(int)
+	for f_behavior,f_ephys in zip(file_lists.e_behavior,file_lists.ephys_files):
 		current_file = f_behavior[-11:-5]
 		print("Adding data from file "+current_file)
-		##get the raw data matrix first 
-		X_raw = pe.get_spike_data(f_ephys,smooth_method='none',smooth_width=None,
-			z_score=False) ##don't zscore or smooth anything yet
-		##save the number of neurons for this session
-		n_neurons += X_raw.shape[0]
-		##now get the window data for the trials in this session
-		ts,ts_idx = pt.get_trial_data(f_behavior,remove_unrew=remove_unrew) #ts is shape trials x ts, and in seconds
-		##store the info about number of trials here
-		if ts.shape[0] > max_trials:
-			max_trials = ts.shape[0]
-		##now, convert to ms and add padding 
-		ts = ts*1000.0
-		trial_wins = ts.astype(int) ##save the raw ts for later, and add the padding to get the full trial windows
-		trial_wins[:,0] = trial_wins[:,0] - pad[0]
-		trial_wins[:,1] = trial_wins[:,1] + pad[1]
-		##convert this array to an integer so we can use it as indices
-		trial_wins = trial_wins.astype(int)
-		##now get the windowed data around the trial times. Return value is a list of the trials
-		X_trials = pe.X_windows(X_raw,trial_wins)
-		##now do the smoothing, if requested
-		if smooth_method != 'none':
-			for t in range(len(X_trials)):
-				X_trials[t] = pe.smooth_spikes(X_trials[t],smooth_method,smooth_width)
-		##add the data to the master lists
-		X_all.append(X_trials)
-		ts_all.append(ts)
-		if ts_idx_all != None:
-			ts_idx_all = concat_ts_idx(ts_idx_all,ts_idx)
-		else:
-			ts_idx_all = ts_idx
-	return X_all,ts_all,ts_idx_all
-	##now we need to get the median trial duration over ALL trials.
-	# median_dur = get_median_dur(ts_all)
-	# ##now, for each session, we want to interpolate all the trials to match this
-	# ##master trial length.
-	# for s in range(len(X_all)):
-	# 	session_data = X_all[s]
-	# 	session_ts = ts_all[s]
-	# 	##get the timestamps relative to the start of trials
-	# 	ts_rel = dpca.get_relative_ts(session_ts,pad,smooth_method,smooth_width)
-	# 	##now run the data through the stretch trials function
-	# 	stretched = dpca.stretch_trials(session_data,ts_rel,median_dur=median_dur)
-	# 	##finally, replace it in the master list
-	# 	X_all[s] = stretched
-	# ##OK, now all sessions should be the same length.
-	# ##let's construct the data container that will hold all the data
-	# X_full = np.empty((max_trials,n_neurons,X_all[0][0].shape[1]))
-	# ##keep track of where we are putting neurons 
-	# n_idx = 0
-	# ##now fill up the array
-	# for s in range(len(X_all)):
-	# 	session_data = np.asarray(X_all[s])
-	# 	X_full[0:session_data.shape[0],n_idx:n_idx+session_data.shape[1],:] = session_data
-	# return X_full, ts_idx_all
-"""
-A function to run and compile regression data for ALL sessions
-	-epoch_durations: the duration, in seconds, of the epochs (see the list in the function)
-	-smooth_method: type of smoothing to use; choose 'bins', 'gauss', or 'none'
-	-smooth_width: size of the bins or gaussian kernel in ms
-	-z_score: if True, z-scores the array
-			$$NOTE$$: this implementatin does not allow binning AND gaussian smoothing.
-	-save: if True, saves data at the end
-Returns:
-	-C: matrix of coefficients, shape units x regressors x bins (all epochs are concatenated)
-	-num_sig: matrix with the counts of units showing significant regression
-		values at for each regressor at each bin (regressors x bins)
-	-mse: mean squared error of the model fit at each bin 
-		based on x-validation (size = bins)
-	-epoch_idx: the indices of bins corresponding to the different epochs
-"""
-def full_regression(epoch_durations=[1,0.5,1,1],smooth_method='bins',
-	smooth_width=50,z_score=False,save=True):
-	##run session regression on all files in the lists
-	results_files = []
-	for f_behavior,f_ephys in zip(file_lists.behavior_files,file_lists.ephys_files):
-		current_file = f_behavior[-11:-5]
-		print("Starting on file "+current_file)
-		out_path = os.path.join(file_lists.save_loc,current_file+".hdf5")
-		try: 
-			f_out = h5py.File(out_path,'w-')
-			##if data does not exist, calculate it and save it
-			c,ns,mse,epoch_idx = sa.session_regression(f_behavior,f_ephys,
-				epoch_durations=epoch_durations,smooth_method=smooth_method,
-				smooth_width=smooth_width,z_score=z_score)
-			f_out.create_dataset("coeffs",data=c)
-			f_out.create_dataset("num_sig",data=ns)
-			f_out.create_dataset("mse",data=mse)
-			for key in epoch_idx.keys():
-				f_out.create_dataset(key,data=epoch_idx[key])
-			f_out.close()
-			results_files.append(out_path)
-		except IOError:
-			results_files.append(out_path)
-			print(current_file+" exists, moving on...")
-	##if all data is saved, you can go back to the files and save the data that you want.
-	##data to return
-	coeffs = []
-	num_sig = []
-	mse = []
-	num_total_units = 0
-	for results_file in results_files:
-		epoch_idx = get_epoch_idx_dict(results_file)
-		f_in = h5py.File(results_file,'r')
-		c = np.asarray(f_in['coeffs'])
-		ns =np.asarray(f_in['num_sig'])
-		m = np.asarray(f_in['mse'])
-		num_units = c.shape[0]
-		coeffs.append(c)
-		num_sig.append(ns)
-		mse.append(m)
-		num_total_units+=num_units
-	##concatenate all arrays
-	coeffs = np.concatenate(coeffs,axis=0)
-	num_sig = np.asarray(num_sig).sum(axis=0)
-	mse = np.asarray(mse).mean(axis=0)
-	if save:
-		out_path = os.path.join(file_lists.save_loc,"all_files_regression.hdf5")
-		f_out = h5py.File(out_path,'w-')
-		f_out.create_dataset("coeffs",data=coeffs)
-		f_out.create_dataset("num_sig",data=num_sig)
-		f_out.create_dataset("mse",data=mse)
-		f_out.create_dataset("num_units",data=np.array([num_total_units]))
-		for key in epoch_idx.keys():
-			f_out.create_dataset(key,data=epoch_idx[key])
-		f_out.close()
-	return coeffs,num_sig,mse,epoch_idx,num_total_units
-
-"""
-A function to get the condition-averaged responses for all sessions in one giant 
-data matrix. The conditions are not concatenated, but just use the function
-in parse_ephys to get the matrix for PCA.
-Inputs:
-	-epoch: (str), name of epoch to use for trial data
-	-epoch_duration: duration of epoch to look at (in sec)
-	-smooth_method: smooth method to use; see ephys functions
-	-smooth_width: smooth width, lol
-	-use_unrewarded: bool, whether to include or exclude unrewarded trials.
-		if included, these become their own condition.
-Returns: 
-	X. data matrix of size conditions x units x bins
-	order: list of strings defining the order of the conditions in the matrix
-"""
-def cond_avg_matrix(epoch,epoch_duration,smooth_method='bins',smooth_width=50,
-	use_unrewarded='True'):
-	##go through all files
-	Xc = []
-	conditions = []
-	for f_behavior,f_ephys in zip(file_lists.behavior_files,file_lists.ephys_files):
-		current_file = f_behavior[-11:-5]
-		print("Starting on file "+current_file)
-		x,cond = sa.condition_averaged_responses(f_behavior,f_ephys,epoch_duration=epoch_duration,
-			smooth_method=smooth_method,smooth_width=smooth_width,use_unrewarded=use_unrewarded)
-		Xc.append(x)
-		conditions.append(cond)
-	##make sure the conditions are all in the same order
-	for c in range(len(conditions)):
-		assert conditions[c] == conditions[0]
-	return np.concatenate(Xc,axis=1),conditions[0]
+		##append the dataset from this session
+		X_all.append(dpca.get_dataset(f_behavior,f_ephys,conditions,smooth_method=smooth_method,
+			smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=med_duration,
+			max_duration=max_duration,min_rate=min_rate,balance=balance))
+	##now, get an idea of how many trials we have per dataset
+	n_trials = [] ##keep track of how many trials are in each session
+	include = [] ##keep track of which sessions have more then the min number of trials
+	for i in range(len(X_all)):
+		n = X_all[i].shape[0]
+		if n >= min_trials:
+			include.append(i)
+			n_trials.append(n)
+	##from this set, what is the minimum number of trials?
+	print("Including {0!s} sessions out of {1!s}".format(len(include),len(X_all)))
+	min_trials = min(n_trials)
+	##now all we have to do is concatenate everything together!
+	X_c = []
+	for s in include:
+		X_c.append(X_all[s][0:min_trials,:,:,:,:])
+	return np.concatenate(X_c,axis=1)
 
 
-"""
-A function to run the logistic regression on all files.
-No outputs are created, but data is saved to individual HDf5 files.
-Inputs: 
-	-epoch_durations: the duration, in seconds, of the epochs (see the list in the function)
-	-smooth_method: type of smoothing to use; choose 'bins', 'gauss', or 'none'
-	-smooth_width: size of the bins or gaussian kernel in ms
-	-z_score: if True, z-scores the array
-REturns: 
-	None,but data is saved.
-"""
-def full_log_regression(epoch_durations=[1,0.5,1,1],smooth_method='bins',smooth_width=200,
-	z_score=True,save=True):
-	for f_behavior,f_ephys in zip(file_lists.behavior_files,file_lists.ephys_files):
-		current_file = f_behavior[-11:-5]
-		print("Starting on file "+current_file)
-		try:
-			results = sa.log_regress_session(f_behavior,f_ephys,epoch_durations=epoch_durations,
-				smooth_method=smooth_method,smooth_width=smooth_width,z_score=z_score,save=save)
-		except IOError:
-			print(current_file+" exists, skipping...")
-	print("Done!")
-	return None
+
 
 
 """
@@ -435,78 +289,38 @@ def analyze_log_regressions(dir_list,session_range=None,sig_level=0.05,test_type
 			cursor += sig_idx.size
 	return all_data
 
-
-
-
-
 """
-A function to project neural data from various conditions onto various
-axes defined by de-noised regression vectors.
-Inputs:
-	-f_regression: HDF5 file where the regression data is stored
-	-f_data: HDF5 file where the data matrix is stored
-	=epoch: str of the epoch name used to compile data for the spike matrix
-Returns:
-	-results: a dictionary of all the various projections onto different axes
+A function to return some metadata about all files recorded
+inputs:
+	max_duration: trial limit threshold (ms)
 """
-def condition_projections(f_regression,f_data,epoch='choice',n_pcs=12):
-	##retrieve the regression data
-	f = h5py.File(f_regression,'r')
-	R = np.asarray(f['coeffs'])
-	idx = np.asarray(f[epoch])
-	R = R[:,:,idx]
-	f.close()
-	##now retrieve the data matrix
-	f = h5py.File(f_data,'r')
-	Xc = np.asarray(f['data'])
-	conditions = list(np.asarray(f['conditions']))
-	f.close()
-	result = PCA.value_projections(Xc,R,conditions,n_pcs)
-	return result
-
-"""
-A helper function to concatenate dictionaries of timestamp indices. 
-Useful when you are combining trials from many sessions but want to 
-keep track of which trials where which types.
-Inputs:
-	master: master ts_idx dictionary to add to.
-	to_add: ts_idx dictionary whose indices need to be added to the master.
-Returns:
-	master: master ts_idx with new indices added and offset appropriately
-"""
-def concat_ts_idx(master,to_add):
-	##we'll copy master just to make sure we don't mess anything up
-	new_master = master.copy()
-	##first we need to figure out how many trials are already in the master
-	offset = 0
-	for key in new_master.keys():
-		if max(new_master[key])>offset:
-			offset = max(new_master[key])
-	##now add the indices to the master, accounting for the offset
-	for key in new_master.keys():
-		new_master[key] = np.concatenate((new_master[key],to_add[key]+(offset+1)))
-	return new_master
-
-
-"""
-a helper function to get epoch_idx dictionary from a file of regression data
-Inputs:
-	-f_in: file path of HDF5 file with regression data
-Returns:
-	-epoch_idx dictionary with the indices corresponding to the various epochs (dict keys)
-"""
-def get_epoch_idx_dict(f_in):
-	epoch_idx = {
-	"choice":None,
-	"action":None,
-	"delay":None,
-	"outcome":None
+def get_metadata(max_duration=5000):
+	metadata = {
+	'training_sessions':0,
+	'sessions_with_ephys':0,
+	'rewarded_trials':0,
+	'unrewarded_trials':0,
+	'upper_context_trials':0,
+	'lower_context_trials':0,
+	'upper_lever_trials':0,
+	'lower_lever_trials':0,
+	'units_recorded':0
 	}
-	f = h5py.File(f_in,'r')
-	for key in epoch_idx.keys():
-		epoch_idx[key] = np.asarray(f[key])
-	f.close()
-	return epoch_idx
+	for f_behavior in file_lists.behavior_files:
+		meta = sa.get_session_meta(f_behavior,max_duration)
+		metadata['training_sessions']+=1
+		metadata['rewarded_trials']+=meta['rewarded'].size
+		metadata['unrewarded_trials']+=meta['unrewarded'].size
+		metadata['upper_context_trials']+=meta['upper_context'].size
+		metadata['lower_context_trials']+=meta['lower_context'].size
+		metadata['lower_lever_trials']+=meta['lower_lever'].size
+		metadata['upper_lever_trials']+=meta['upper_lever'].size
+	for f_ephys in file_lists.ephys_files:
+		metadata['sessions_with_ephys']+=1
+		metadata['units_recorded']+=sa.get_n_units(f_ephys)
+	return metadata
+
+
 
 ##returns a list of file paths for all hdf5 files in a directory
 def get_file_names(directory):
@@ -568,3 +382,4 @@ def get_l2_prob(reversal_data):
 		n_l2 = (reversal_data[:,i] == 2).sum()
 		result[i] = float(n_l2)/float(n_l1+n_l2)
 	return result
+

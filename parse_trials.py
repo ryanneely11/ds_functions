@@ -6,6 +6,93 @@ import numpy as np
 import parse_timestamps as pt
 import dpca
 import parse_ephys as pe
+import h5py
+import pandas as pd
+
+
+"""
+A function to get full trial data.
+Inputs:
+	f_behavior: file path to an hdf5 file with behavioral data
+	pad: time (ms) around action and outcome timestamps to consider the start and end of the trial
+	max_duration: upper bound on allowable trial durations, defined as period between action and outcome
+Returns:
+	data: a pandas dataframe with timestamps and event ID info for each trial
+"""
+def get_full_trials(f_behavior,pad=[400,400],max_duration=5000):
+	f = h5py.File(f_behavior,'r')
+	##first, mix all of the data we care about together into two arrays, 
+	##one with timstamps and the other with timestamp ids.
+	##for now, we don't care about the following timestamps:
+	exclude = ['session_length','reward_primed','reward_idle',
+	'bottom_rewarded','top_rewarded']
+	event_ids = [x for x in list(f) if x not in exclude]
+	##let's also store info about trial epochs
+	upper_rewarded = np.asarray(f['top_rewarded'])
+	lower_rewarded = np.asarray(f['bottom_rewarded'])
+	session_length = np.floor(np.asarray(f['session_length'])*1000.0).astype(int)
+	f.close()
+	ts,ts_ids = pt.mixed_events(f_behavior,event_ids)
+	##now we can do a little cleanup of the events. 
+	##to remove duplicate nose pokes:
+	ts,ts_ids = pt.remove_duplicate_pokes(ts,ts_ids)
+	##to remove accidental lever presses
+	ts,ts_ids = pt.remove_lever_accidents(ts,ts_ids)
+	##finally, make sure the last trial completed before the end of the session
+	ts,ts_ids = pt.check_last_trial(ts,ts_ids)
+	##now get the ranges of the different block times
+	##****This section is super confusing, but it works so...***
+	block_times = pt.get_block_times(lower_rewarded,upper_rewarded,session_length)
+	try:
+		upper_rewarded = np.floor(np.asarray(block_times['upper'])[:,0]*1000.0).astype(int)
+	except KeyError:
+		upper_rewarded = np.array([])
+	try:
+		lower_rewarded = np.floor(np.asarray(block_times['lower'])[:,0]*1000.0).astype(int)
+	except KeyError:
+		lower_rewarded = np.array([])
+	block_times = pt.get_block_times(lower_rewarded,upper_rewarded,session_length) ##now it's in ms
+	##get a list of when the trials "started;" ie when the reward lever became active (we won't use this
+	##timestamp in the end but it's useful for parsing the trial)
+	trial_starts = np.where(ts_ids=='trial_start')[0]
+	n_trials = trial_starts.size
+	##now construct a pandas dataframe to store all of this information
+	columns = ['start_ts','action_ts','outcome_ts','end_ts','context','action','outcome']
+	data = pd.DataFrame(index=np.arange(n_trials),columns=columns)
+	data.index.name = 'trial_number'
+	##run through each of the trials and add data to the final dataframe
+	for t in range(n_trials):
+		##the data for this trial is everything in between this trial_start and the next one
+		try:
+			trial_events = ts_ids[trial_starts[t]:trial_starts[t+1]]
+			trial_ts = ts[trial_starts[t]:]
+		except IndexError: ##case where it's the last trial
+			trial_events = ts_ids[trial_starts[t]:]
+			trial_ts = ts[trial_starts[t]:]
+		##determine which of the events in this set are the first action and first outcome
+		##(if he presses more than once it's only the first one that counts; likewise for pokes)
+		action_idx, outcome_idx = get_first_idx(trial_events)
+		#add these data to the dataframe
+		data['action_ts'][t] = trial_ts[action_idx]
+		##annoying, but we need to switch the name here for consistency with other functions
+		if trial_events[action_idx] == 'top_lever':
+			action = 'upper_lever'
+		elif trial_events[action_idx] == 'bottom_lever':
+			action = 'lower_lever'
+		else:
+			print("Warning: detected action was not top or bottom lever")
+		data['action'][t] = action
+		outcome = trial_events[outcome_idx]
+		data['outcome_ts'][t] = trial_ts[outcome_idx]
+		data['outcome'][t] = outcome
+		##add info about trial start and end based on padding parameters
+		data['start_ts'][t] = trial_ts[action_idx]-pad[0]
+		data['end_ts'][t] = trial_ts[outcome_idx]+pad[1]
+		##now we need to know what the context was for this trial
+		data['context'][t] = pt.which_block(block_times,trial_ts[0])
+	data = check_trial_len(data,max_length=max_duration)
+	return data
+
 
 """
 A function to get windowed data around a particular type of event
@@ -17,6 +104,7 @@ Inputs:
 	-smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
 	-smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
 		with index 0 being the gaussian width and index 1 being the bin width
+	-if nan==True, any low-rate units that are marked for removal are simply filled with np.nan
 Returns:
 	-X data array in shape n_units x n_trials x b_bins
 """
@@ -44,6 +132,80 @@ def get_event_spikes(f_behavior,f_ephys,event_name,window=[400,0],
 		X_trials = dpca.zscore_across_trials(X_trials)
 	return X_trials
 
+"""
+A function to get spike data for all the units/trials in a session. 
+Because trials can be a different length, this function stretches or
+squeezes trials into a uniform length using interpolation.
+Inputs:
+	f_behavior: file path to behavior data
+	f_ephys: file path to ephys data
+	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	pad: a window for pre- and post-trial padding, in ms. In other words, an x-ms period of time 
+		before lever press to consider the start of the trial, and an x-ms period of time after
+		reward to consider the end of the trial. For best results, should be a multiple of the bin size
+	z_score: if True, z-scores the array
+	trial_duration: specifies the trial length (in ms) to squeeze trials into. If None, the function uses
+		the median trial length over the trials in the file
+	min_rate: the min spike rate, in Hz, to accept. Units below this value will be removed.
+	max_duration: maximum allowable trial duration (ms)
+Returns:
+	X: processed spike data in the shape trials x units x bins
+	trial_data: pandas datafame with info about the individual trials
+"""
+def get_trial_spikes(f_behavior,f_ephys,smooth_method='both',smooth_width=[80,40],pad=[400,400],
+	z_score=True,trial_duration=None,max_duration=5000,min_rate=0.1):
+	##check if padding is a multiple of bin size; warn if not
+	if smooth_method == 'bins':
+		if (pad[0]%smooth_width !=0) or (pad[1]%smooth_width != 0):
+			print("Warning: pading should be a multiple of smooth width for best results")
+	elif smooth_method == 'both':
+		if (pad[0]%smooth_width[1] !=0) or (pad[1]%smooth_width[1] != 0):
+			print("Warning: pading should be a multiple of smooth width for best results")
+	##parse the raw data
+	trial_data = get_full_trials(f_behavior,pad=pad,max_duration=max_duration)
+	X_raw = pe.get_spike_data(f_ephys,smooth_method='none',z_score=False)
+	##generate the data windows
+	windows = np.zeros((len(trial_data.index),2))
+	windows[:,0] = trial_data['start_ts']
+	windows[:,1] = trial_data['end_ts']
+	windows.astype(int)
+	##get the spike data windows. The output of this is a LIST
+	X_trials = pe.X_windows(X_raw,windows)
+	##get rid of low rate units
+	X_trials = remove_low_rate_units(X_trials,min_rate,nan=False) ##should still be a list
+	if smooth_method != 'none':
+		for t in range(len(X_trials)):
+			X_trials[t] = pe.smooth_spikes(X_trials[t],smooth_method,smooth_width)
+	if z_score:
+		X_trials = dpca.zscore_across_trials(X_trials)
+	##now we can work on equating all the trial lengths
+	##if no specific trial length is requested, just use the median trial dur
+	if trial_duration is None:
+		trial_duration = np.median(windows[:,1]-windows[:,0])
+	##convert this to bins, if data has been binned
+	if smooth_method == 'bins':
+		trial_duration = trial_duration/float(smooth_width)
+	elif smooth_method == 'both':
+		trial_duration = trial_duration/float(smooth_width[1])
+	##now get this number as an integer
+	##keep in mind, this is meant to be the duration of the 
+	##period between action and outcome, which is NOT the full trial duration
+	##if pad != [0,0]. Data in the pre-and post-intervals will not be interpolated
+	trial_duration = np.ceil(trial_duration).astype(int)
+	##get the timestamps relative to the start of each trial
+	if smooth_method == 'bins':
+		ts_rel = get_ts_rel(trial_data,bin_width=smooth_width)
+	elif smooth_method == 'both':
+		ts_rel = get_ts_rel(trial_data,bin_width=smooth_width[1])
+	else: 
+		ts_rel = get_ts_rel(trial_data)
+	##now we can stretch/squeeze all of the trials to be the same length
+	return dpca.stretch_trials(X_trials,ts_rel,trial_duration), trial_data
+
+
+	
 """
 A function to look at the behavior around reversals.
 Inputs:
@@ -143,11 +305,6 @@ def get_reversals(f_behavior,f_behavior_last=None,window=[30,30]):
 			# else:
 			# 	print("unrecognized lever type")
 	return reversal_data
-
-
-
-
-
 
 
 
@@ -323,7 +480,6 @@ def remove_unrewarded(ts_idx):
 	return ts_rewarded
 
 
-
 """
 A function to convert timestamps in sec 
 to timestamps in bins of x ms
@@ -410,6 +566,7 @@ def trials_to_crit(block_start,correct_lever,incorrect_lever,
 		print("Criterion never reached after "+str(ids.size)+" trials")
 	return n_trials
 
+
 """
 A helper function to remove data from units with low spike rates. 
 Inputs:
@@ -466,6 +623,103 @@ def remove_nan_units(X_all):
 	for i in range(len(X_all)):
 		X_clean.append(np.delete(X_all[i],to_remove,axis=1))
 	return X_clean
+
+"""
+A helper function to return the index of the first action and first outcome
+given an array of event ids from one single trial
+Inputs:
+	trial_events: string array of events (in order) from one trial
+Returns:
+	action_idx: index of first action
+	outcome_idx: index of first outcome
+"""
+def get_first_idx(trial_events):
+	actions = ['top_lever','bottom_lever']
+	outcomes = ['rewarded_poke','unrewarded_poke']
+	action_idx = None
+	outcome_idx = None
+	for i,event in enumerate(trial_events):
+		if event in actions:
+			action_idx = i
+			break
+	for j,event in enumerate(trial_events):
+		if event in outcomes:
+			outcome_idx = j
+			break
+	if action_idx == None or outcome_idx == None:
+		raise TypeError("This trial is incomplete (no action or outcome)")
+	return action_idx, outcome_idx
+
+
+"""
+A helper function to determine if a trial duration (between action and outcome)
+exceeds a certain maximum time limit.
+Inputs:
+		data: a pandas dataframe with trial data, of the type returned by get_full_trials()
+		max_length: the maximum allowable threshold length, in ms
+Returns: 
+	dataframe: a copy of the dataframe with trials removed that exceeded the time limit
+"""
+def check_trial_len(data,max_length=5000):
+	to_remove = []
+	for i in range(len(data.index)):
+		duration = data['outcome_ts'][i]-data['action_ts'][i]
+		if duration > max_length:
+			to_remove.append(i)
+		if duration < 0 :
+			print("Error: negative trial length detected (removed)")
+			to_remove.append(i)
+	if len(to_remove)>0:
+		print("Dropping "+str(len(to_remove))+" trials over "+str(max_length/1000)+" sec")
+	data = data.drop(to_remove) 
+	##now replace the index to exclude the dropped trials
+	data.index = np.arange(len(data.index))
+	return data
+
+"""
+A helper function to get an array of trial timestamps relative to the start of
+each trial, given a dataframe of trial data. Assumes dataframe timestamps are in ms, 
+but will automatically convert them to bins if the bin_width param is specified.
+Inputs:
+	data: pandas dataframe with trial data
+	bin_width: bin width to use. If None, assumes 1-ms bins (no conversion)
+Returns:
+	ts_rel: array of timestamps for each trial, relative to the start of each trial
+"""
+def get_ts_rel(data,bin_width=None):
+	###we are going to make some assumptions. First, that the first and last
+	##chunks are all of even padding. Check that now:
+	pre_pad = data['action_ts'][0] - data['start_ts'][0]
+	post_pad = data['end_ts'][0] - data['outcome_ts'][0]
+	assert np.all(data['action_ts']-data['start_ts']==pre_pad), "Uneven pre-padding"
+	assert np.all(data['end_ts']-data['outcome_ts']==post_pad), "Uneven post-padding"
+	##things will not work properly if the padding isn't evenly divisible by bin width
+	if bin_width is not None:
+		assert pre_pad%bin_width == 0
+		assert post_pad%bin_width == 0
+	##now set up the return array
+	events = ['start_ts','action_ts','outcome_ts','end_ts']
+	ts_rel = np.zeros((len(data.index),len(events)))
+	##the first index will always be zero, so skip that.
+	##second index (action) is the pre-pad width
+	if bin_width is not None:
+		ts_rel[:,1] = pre_pad/bin_width
+		##third index (outcome) is the difference between action and outcome, + pre-pad
+		ts_rel[:,2] = (data['outcome_ts']-data['action_ts']+pre_pad)/float(bin_width)
+		##last index is just the third index plus the post-padding
+		ts_rel[:,3] = ts_rel[:,2]+post_pad/bin_width
+	else:
+		ts_rel[:,1] = pre_pad
+		##third index (outcome) is the difference between action and outcome, + pre-pad
+		ts_rel[:,2] = (data['outcome_ts']-data['action_ts']+pre_pad)
+		##last index is just the third index plus the post-padding
+		ts_rel[:,3] = ts_rel[:,2]+post_pad
+	return ts_rel.astype(int)
+
+
+
+
+
 
 
 

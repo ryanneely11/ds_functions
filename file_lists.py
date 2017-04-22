@@ -18,12 +18,12 @@ animals = ['S1','S2','S3']
 
 behavior_files = [
 ##S1 files
-# os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D01.hdf5"), ##first 6 days have only 1 lever
-# os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D02.hdf5"),
-# os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D03.hdf5"),
-# os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D04.hdf5"),
-# os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D05.hdf5"),
-# os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D06.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D01.hdf5"), ##first 6 days have only 1 lever
+os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D02.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D03.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D04.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D05.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D06.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D07.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D08.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_D09.hdf5"),
@@ -55,12 +55,12 @@ os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_R15.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_R16.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S1/behavior/S1_R17.hdf5"),
 ##S2 files
-# os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D01.hdf5"), ##first 6 days only have 1 lever
-# os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D02.hdf5"),
-# os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D03.hdf5"),
-# os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D04.hdf5"),
-# os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D05.hdf5"),
-# os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D06.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D01.hdf5"), ##first 6 days only have 1 lever
+os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D02.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D03.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D04.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D05.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D06.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D07.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D08.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_D09.hdf5"),
@@ -93,12 +93,12 @@ os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_R16.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_R17.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S2/behavior/S2_R18.hdf5"),
 ##S3 files
-# os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D01.hdf5"), ##first 6 days have only 1 lever
-# os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D02.hdf5"),
-# os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D03.hdf5"),
-# os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D04.hdf5"),
-# os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D05.hdf5"),
-# os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D06.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D01.hdf5"), ##first 6 days have only 1 lever
+os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D02.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D03.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D04.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D05.hdf5"),
+os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D06.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D07.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D08.hdf5"),
 os.path.join(root,"Ryan/DS_animals/S3/behavior/S3_D09.hdf5"),

@@ -63,7 +63,7 @@ def X_windows(X,windows):
 	##allocate a list for the return array
 	Xw = []
 	for t in range(windows.shape[0]): ##go through each window
-		idx = np.arange(windows[t,0],windows[t,1]) ##the indices of the data for this window
+		idx = np.arange(windows[t,0],windows[t,1],dtype='i') ##the indices of the data for this window
 		Xw.append(X[:,idx])
 	return Xw
 
@@ -146,12 +146,11 @@ Returns:
 	1-d binary spike train with spike counts in each bin
 """
 def bin_spikes(data,bin_width):
-	bin_vals = []
-	idx = 0
-	while idx < data.size:
-		bin_vals.append(data[idx:idx+bin_width].sum())
-		idx += bin_width
-	return np.asarray(bin_vals)
+	n_bins = int(data.size/bin_width)
+	bin_vals = np.zeros(n_bins)
+	for i in range(n_bins):
+		bin_vals[i] = data[i*bin_width:(i+1)*bin_width].sum()
+	return bin_vals
 
 """
 A helper function to do spike smoothing. 

@@ -552,288 +552,6 @@ def plot_persistence_all(save=False):
 
 
 """
-A function to plot the significance of the regression. Same as the above function but
-for the sub-functions that work on bin sizes
-coefficients for a all units over epochs defined elsewhere, for all sessions* (see file_lists.py)
-Exaclt the same as plot_session_regression but it includes data from multple sessions
-Inputs:
-	-coeffs: array of coefficients
-	-sig_vals:
-	-mse
-	-epoch_idx
-	-trial_len: length of the whole thing in seconds
-"""
-def plot_regressions(coeffs,sig_vals,MSE,epoch_idx,trial_len):
-	##assume that the epochs are the same from the ml_regress functions
-	epoch_labels = ['Pre-action','Action','Delay','Outcome']
-	epochs = ['choice','action','delay','outcome']
-	colors = ['g','r','k','c']
-	##assume the following regressors; in this order
-	regressors = ['Choice','Reward', 'CxR',
-					'Q upper','Q lower',
-					'Q chosen']
-	##some metadata
-	num_units = coeffs.shape[0]
-	num_windows = coeffs.shape[2]
-	##the x-axis 
-	x_coords = np.linspace(0,trial_len,num_windows)
-	##setup the figure to plot the significant values
-	##sig_vals = sig_vals.sum(axis=0)/float(num_units)
-	sig_vals = sig_vals/float(num_units)
-	fig = plt.figure()
-	gs = gridspec.GridSpec(len(regressors),num_windows)
-	min_y = sig_vals.min()
-	max_y = sig_vals.max()
-	for r in range(len(regressors)):
-		for e in range(len(epochs)):
-			epoch = epochs[e]
-			idx = epoch_idx[epoch]
-			x = x_coords[idx]
-			ax = plt.subplot(gs[r,idx[0]:idx[-1]+1])
-			#ax.axhspan(0,0.05,facecolor='b',alpha=0.5) ##significance threshold
-			if x.size == 1:
-				x_center = x[0]/2.0
-			else:
-				x_center = (x[-1]-x[0])/2
-			color = colors[e]
-			ydata = sig_vals[r,idx]
-			ax.plot(x,ydata,color=color,linewidth=2,marker='o',label=epoch)
-			# for xpt,ypt in zip(x,ydata):
-			# 	if ypt <=0.05:
-			# 		ax.text(xpt,ypt+0.1,"*",fontsize=16) ##TODO: figure out how to get significance here
-			ax.set_ylim(min_y,max_y)
-			##conditional axes labels
-			if r+1 == len(regressors):
-				ax.set_xticks(np.round(x,1))
-			else:
-				ax.set_xticklabels([])
-			if e+1 == len(epochs):
-				ax.yaxis.tick_right()
-				ax.set_yticks([0,max_y])
-			else:
-				ax.set_yticklabels([])
-			if r == 0:
-				ax.set_title(epoch_labels[e],fontsize=14,weight='bold')
-			if e == 0:
-				ax.set_ylabel(regressors[r],fontsize=12,weight='bold')
-			if r+1 == len(regressors) and e == 2:
-				ax.set_xlabel("Time in trial, s",fontsize=14,weight='bold')
-	fig.suptitle("Proportion of "+str(num_units)+" units",fontsize=14)
-	#setup the figure to plot the coefficients
-	coeffs = coeffs.mean(axis=0)
-	fig = plt.figure()
-	gs = gridspec.GridSpec(len(regressors),num_windows)
-	min_y = coeffs.min()
-	max_y = coeffs.max()
-	for r in range(len(regressors)):
-		for e in range(len(epochs)):
-			epoch = epochs[e]
-			idx = epoch_idx[epoch]
-			x = x_coords[idx]
-			ax = plt.subplot(gs[r,idx[0]:idx[-1]+1])
-			#ax.axhspan(0,0.05,facecolor='b',alpha=0.5) ##significance threshold
-			if x.size == 1:
-				x_center = x[0]/2.0
-			else:
-				x_center = (x[-1]-x[0])/2
-			color = colors[e]
-			ydata = coeffs[r,idx]
-			ax.plot(x,ydata,color=color,linewidth=2,marker='o',label=epoch)
-			# for xpt,ypt in zip(x,ydata):
-			# 	if ypt <=0.05:
-			# 		ax.text(xpt,ypt+0.1,"*",fontsize=16) ##TODO: figure out how to get significance here
-			ax.set_ylim(min_y,max_y)
-			##conditional axes labels
-			if r+1 == len(regressors):
-				ax.set_xticks(np.round(x,1))
-			else:
-				ax.set_xticklabels([])
-			if e+1 == len(epochs):
-				ax.yaxis.tick_right()
-				#ax.set_yticks([-.5,.5])
-			else:
-				ax.set_yticklabels([])
-			if r == 0:
-				ax.set_title(epoch_labels[e],fontsize=14,weight='bold')
-			if e == 0:
-				ax.set_ylabel(regressors[r],fontsize=12,weight='bold')
-			if r+1 == len(regressors) and e == 2:
-				ax.set_xlabel("Time in trial, s",fontsize=14,weight='bold')
-	fig.suptitle("Mean regression coeffs.",fontsize=14)
-	##now plot the predictability values
-	fig = plt.figure()
-	gs = gridspec.GridSpec(1,num_windows)
-	min_y = MSE.min()
-	max_y = MSE.max()
-	for e in range(len(epochs)):
-		epoch = epochs[e]
-		idx = epoch_idx[epoch]
-		x = x_coords[idx]
-		ax = plt.subplot(gs[0,idx[0]:idx[-1]+1])
-		if x.size == 1:
-			x_center = x[0]/2.0
-		else:
-			x_center = (x[-1]-x[0])/2
-		color = colors[e]
-		ydata = MSE[idx]
-		ax.plot(x,ydata,color=color,linewidth=2,marker='o',label=epoch)
-		ax.set_ylim(min_y,max_y)
-		ax.set_xticks(np.round(x,1))
-		if e+1 == len(epochs):
-			ax.yaxis.tick_right()
-		else:
-			ax.set_yticklabels([])
-		ax.set_title(epoch_labels[e],fontsize=14,weight='bold')
-		if e == 0:
-			ax.set_ylabel("Mean sq. error",fontsize=12,weight='bold')
-		if e == 2:
-			ax.set_xlabel("Time in trial, s",fontsize=14,weight='bold')
-	fig.suptitle("Prediction error",fontsize=14)
-
-"""
-Caclulates and plots the interval between action and outcome
- for a single session.
-Inputs:
-	-dictionary of results produced by parse_timestamps
-Outputs:
-	plot
-"""
-def ao_duration_analysis(f_in):
-	##get the relevant data
-	results_dict = pt.sort_by_trial(f_in)
-	##start with the upper lever rewarded sessions
-	try:
-		upper_trials = results_dict['upper_rewarded']
-		upper_trial_durs = ptr.get_ao_interval(upper_trials)
-	except KeyError:
-		upper_trial_durs = None
-	##move on to the lower lever if applicable
-	try:
-		lower_trials = results_dict['lower_rewarded']
-		lower_trial_durs = ptr.get_ao_interval(lower_trials)
-	except KeyError:
-		lower_trial_durs = None
-	##get some basic stats
-	fig,ax = plt.subplots(1)
-	fig.patch.set_facecolor('white')
-	fig.set_size_inches(10,4)
-	if upper_trial_durs is not None:
-		upper_dur_mean = abs(upper_trial_durs).mean()
-		upper_dur_std = abs(upper_trial_durs).std()
-		##get just the successful trials
-		r_idx = np.where(upper_trial_durs>0)
-		r_upper_durs = upper_trial_durs[r_idx]
-		r_upper_times = upper_trials[r_idx,0]
-		##get just the unsuccessful trials
-		u_idx = np.where(upper_trial_durs<0)
-		u_upper_durs = upper_trial_durs[u_idx]
-		u_upper_times = upper_trials[u_idx,0]
-		##plot this stuff
-		ax.scatter(r_upper_times,abs(r_upper_durs),edgecolor='green',marker='o',s=30,
-			linewidth=2,facecolors=('green',),alpha=0.7,label='rewarded upper lever')
-		ax.scatter(u_upper_times,abs(u_upper_durs),color='green',marker='x',s=30,
-			linewidth=2,label='unrewarded upper lever')
-		# ax2.scatter(r_upper_times,abs(r_upper_durs),edgecolor='green',marker='o',s=30,
-		# 	linewidth=2,facecolors=('green',),alpha=0.7,label='rewarded upper lever')
-		# ax2.scatter(u_upper_times,abs(u_upper_durs),color='green',marker='x',s=30,
-		# 	linewidth=2,label='unrewarded upper lever')		
-	if lower_trial_durs is not None:
-		lower_dur_mean = abs(lower_trial_durs).mean()
-		lower_dur_std = abs(lower_trial_durs).std()
-		##get just the successful trials
-		r_idx = np.where(lower_trial_durs>0)
-		r_lower_durs = lower_trial_durs[r_idx]
-		r_lower_times = lower_trials[r_idx,0]
-		##get just the unsuccessful trials
-		u_idx = np.where(lower_trial_durs<0)
-		u_lower_durs = lower_trial_durs[u_idx]
-		u_lower_times = lower_trials[u_idx,0]
-		##plot this stuff
-		ax.scatter(r_lower_times,abs(r_lower_durs),edgecolor='red',marker='o',s=30,
-			linewidth=2,facecolors=('red',),alpha=0.7,label='rewarded lower lever')
-		ax.scatter(u_lower_times,abs(u_lower_durs),color='red',marker='x',s=30,
-			linewidth=2,label='unrewarded lower lever')
-		# ax2.scatter(r_lower_times,abs(r_lower_durs),edgecolor='red',marker='o',s=30,
-		# 	linewidth=2,facecolors=('red',),alpha=0.7,label='rewarded lower lever')
-		# ax2.scatter(u_lower_times,abs(u_lower_durs),color='red',marker='x',s=30,
-		# 	linewidth=2,label='unrewarded lower lever')
-	# for label in ax2.xaxis.get_ticklabels()[1::2]:
-	# 	label.set_visible(False)
-	for label in ax.xaxis.get_ticklabels()[1::2]:
-		label.set_visible(False)
-	# for label in ax2.xaxis.get_ticklabels()[::2]:
-	# 	label.set_fontsize(14)
-	for label in ax.xaxis.get_ticklabels()[::2]:
-		label.set_fontsize(14)
-	# for label in ax2.yaxis.get_ticklabels()[1::2]:
-	# 	label.set_visible(False)
-	for label in ax.yaxis.get_ticklabels()[1::2]:
-		label.set_visible(False)
-	# for label in ax2.yaxis.get_ticklabels()[::2]:
-	# 	label.set_fontsize(14)
-	for label in ax.yaxis.get_ticklabels()[::2]:
-		label.set_fontsize(14)
-	# ##if there are outliers, break the axis
-	# try:
-	# 	outliers = np.hstack((upper_outliers,lower_outliers))
-	# except NameError: ##if we only have one kind of trial
-	# 	if upper_trial_durs is not None:
-	# 		outliers = upper_outliers
-	# 	else:
-	# 		outliers = lower_outliers
-	# if outliers.size > 0:
-	# 	ax2.set_ylim(-1,max(2*lower_dur_std,2*upper_dur_std))
-	# 	ax.set_ylim(outliers.min()-5,outliers.max()+10)
-	# 	# hide the spines between ax and ax2
-	# 	ax.spines['bottom'].set_visible(False)
-	# 	ax2.spines['top'].set_visible(False)
-	# 	ax.xaxis.tick_top()
-	# 	ax.tick_params(labeltop='off')  # don't put tick labels at the top
-	# 	ax2.xaxis.tick_bottom()
-
-	# 	# This looks pretty good, and was fairly painless, but you can get that
-	# 	# cut-out diagonal lines look with just a bit more work. The important
-	# 	# thing to know here is that in axes coordinates, which are always
-	# 	# between 0-1, spine endpoints are at these locations (0,0), (0,1),
-	# 	# (1,0), and (1,1).  Thus, we just need to put the diagonals in the
-	# 	# appropriate corners of each of our axes, and so long as we use the
-	# 	# right transform and disable clipping.
-
-	# 	d = .015  # how big to make the diagonal lines in axes coordinates
-	# 	# arguments to pass plot, just so we don't keep repeating them
-	# 	kwargs = dict(transform=ax.transAxes, color='k', clip_on=False)
-	# 	ax.plot((-d, +d), (-d, +d), **kwargs)        # top-left diagonal
-	# 	ax.plot((1 - d, 1 + d), (-d, +d), **kwargs)  # top-right diagonal
-
-	# 	kwargs.update(transform=ax2.transAxes)  # switch to the bottom axes
-	# 	ax2.plot((-d, +d), (1 - d, 1 + d), **kwargs)  # bottom-left diagonal
-	# 	ax2.plot((1 - d, 1 + d), (1 - d, 1 + d), **kwargs)  # bottom-right diagonal
-	# else:
-	# 	fig.delaxes(ax)
-	# 	fig.draw()
-	# if outliers.size > 0:
-	# 	legend=ax.legend(frameon=False)
-	# 	try:
-	# 		plt.text(0.2, 0.9,'upper lever mean = '+str(upper_dur_mean),ha='center',
-	# 			va='center',transform=ax.transAxes,fontsize=14)
-	# 	except NameError:
-	# 		pass
-	# 	try:
-	# 		plt.text(0.2, 0.8,'lower lever mean = '+str(lower_dur_mean),ha='center',
-	# 			va='center',transform=ax.transAxes,fontsize=14)
-	# 	except NameError:
-	# 		pass
-	# else:
-	legend=ax.legend(frameon=False)
-	for label in legend.get_texts():
-		label.set_fontsize('large')
-	legend.get_frame().set_facecolor('none')
-	ax.set_xlabel("Time in session, s",fontsize=14)
-	ax.set_ylabel("Trial duration, s",fontsize=14)
-	fig.suptitle("Duration of trials",fontsize=14)
-
-
-"""
 takes in a data dictionary produced by parse_log
 plots the lever presses and the switch points for levers
 """
@@ -926,7 +644,7 @@ the appropriate format.
 Inputs:
 	f_behavior: a hdf5 file path to where the raw behavior data is stored.
 """
-def plot_trial(f_behavior):
+def plot_trials(f_behavior):
 	results = pt.get_event_data(f_behavior)
 	##we will split this data a little further, into
 	##different catagories.
@@ -980,27 +698,65 @@ def plot_trial(f_behavior):
 	ax.set_title("Session "+f_behavior[-11:-5],fontsize=14)
 	ax.legend(bbox_to_anchor=(1,1))
 
+"""
+Plots the distributions of trial durations early to late, as well as overall
+"""
+def plot_trial_durations(early_range=[0,5],late_range=[13,20],max_duration=30*1000):
+	##start by getting the data
+	early_durations = fa.get_trial_durations(max_duration=max_duration,session_range=early_range)/1000.0
+	late_durations = fa.get_trial_durations(max_duration=max_duration,session_range=late_range)/1000.0
+	all_durations = fa.get_trial_durations(max_duration=max_duration,session_range=None)/1000.0
+	fig = plt.figure()
+	gs = gridspec.GridSpec(2,2)
+	ax = fig.add_subplot(gs[0,:])
+	ax2 = fig.add_subplot(gs[1,0])
+	ax3 = fig.add_subplot(gs[1,1], sharey=ax2)
+	##now plot the histograms
+	n,bins,patches=ax.hist(all_durations,50,normed=1,facecolor='green',alpha=0.75,edgecolor='green',linewidth=3)
+	##add a 'best_fit' line
+	y = matplotlib.mlab.normpdf(bins,all_durations.mean(),all_durations.std())
+	l = ax.plot(bins,y,'k--',linewidth=1)
+	ax.set_title("All sessions",fontsize=14,weight='bold')
+	ax.set_xlabel("Trial duration (s)",fontsize=14)
+	ax.set_ylabel("Probability",fontsize=14)
+	for tick in ax.xaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	for tick in ax.yaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	ax.text(5,0.3,"mean={0:.2f}".format(all_durations.mean()))
+	##for early sessions
+	n,bins2,patches=ax2.hist(early_durations,bins=bins,normed=1,facecolor='cyan',alpha=0.75,edgecolor='cyan',linewidth=3)
+	##add a 'best_fit' line
+	y = matplotlib.mlab.normpdf(bins,early_durations.mean(),early_durations.std())
+	l = ax2.plot(bins,y,'k--',linewidth=1)
+	ax2.set_title("Early sessions",fontsize=14,weight='bold')
+	ax2.set_xlabel("Trial duration (s)",fontsize=14)
+	ax2.set_ylabel("Probability",fontsize=14)
+	for tick in ax2.xaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	for tick in ax2.yaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	ax2.text(5,0.3,"mean={0:.2f}".format(early_durations.mean()))
+	##for late sessions
+	n,bins3,patches=ax3.hist(late_durations,bins=bins,normed=1,facecolor='blue',alpha=0.75,edgecolor='blue',linewidth=3)
+	##add a 'best_fit' line
+	y = matplotlib.mlab.normpdf(bins,late_durations.mean(),late_durations.std())
+	l = ax3.plot(bins,y,'k--',linewidth=1)
+	ax3.set_title("Late sessions",fontsize=14,weight='bold')
+	ax3.set_xlabel("Trial duration (s)",fontsize=14)
+	ax3.set_ylabel("Probability",fontsize=14)
+	for tick in ax3.xaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	for tick in ax3.yaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	ax3.text(5,0.3,"mean={0:.2f}".format(late_durations.mean()))
+	fig.suptitle("Distibution of trial durations",fontsize=14)
+	plt.tight_layout()
+
 
 
 
 """
-Plots a sample of the raw data matrix, X.
-Inputs:
-	-X; raw data matrix calculated by pca.get_datamatrix()
-	-trial_len: length of one trial in bins
-"""
-def plot_X_sample(X,trial_len):
-	fig, ax = plt.subplots(1)
-	cax=ax.imshow(X[:,:trial_len*10],origin='lower',interpolation='none',aspect='auto')
-	x = np.arange(0,trial_len*10,trial_len)
-	ax.vlines(x,0,X.shape[0], linestyle='dashed',color='white')
-	ax.set_ylabel("Neuron #",fontsize=18)
-	ax.set_xlabel("Bin #", fontsize=18)
-	cb = fig.colorbar(cax,label="spikes")
-	fig.set_size_inches(10,6)
-	fig.suptitle("Showing first 10 trials",fontsize=20)
-
-	"""
 A function to plot the covariance matrix
 Inputs:
 	-C: covariance matrix
@@ -1191,166 +947,6 @@ def plot_projections(results_dict,epoch='choice'):
 		ax.set_ylabel("axis 2")
 		ax.set_title(key)
 
-"""
-A function to plot the results of logistic regression
-Inputs:
-	X: unit data matrix in shape trials x units x bins/time
-	y: binary event matrix (1-d)
-	sig_idx: index of units with significant predicability
-"""
-def plot_log_units(results,condition):
-	data = results[condition]
-	sig_idx = data['idx']
-	X = data['X']
-	##get the indexes of non-sig units
-	nonsig_idx = np.asarray([t for t in range(X.shape[0]) if t not in sig_idx])
-	n_total = X.shape[0]
-	n_sig = sig_idx.size
-	n_nonsig = n_total - n_sig
-	##determine the number of subplots to use for each catagory
-	if n_sig % 5 == 0:
-		sig_rows = n_sig/5
-	else:
-		sig_rows = (n_sig/5)+1
-	if n_nonsig% 5 == 0:
-		nonsig_rows = n_nonsig/5
-	else:
-		nonsig_rows = (n_nonsig/5)+1
-	##make the figure objects
-	sigfig = plt.figure()
-	nonsigfig = plt.figure()
-	##get the indexes of the two different conditions
-	events = [x for x in list(data) if 'lever' in x or 'poke' in x]
-	idx_c1 = data[events[0]]
-	idx_c2 = data[events[1]]
-	##start by plotting the significant figures
-	for n in range(n_sig):
-		idx = sig_idx[n]
-		##the data for this unit
-		c1_mean, c1_h1, c1_h2 = mean_and_sem(X[idx,idx_c1,:])
-		c2_mean, c2_h1, c2_h2 = mean_and_sem(X[idx,idx_c2,:])
-		##the subplot axis for this unit's plot
-		ax = sigfig.add_subplot(sig_rows,5,n+1)
-		ax.plot(c1_mean,color='b',linewidth=2,label=events[0])
-		ax.plot(c2_mean,color='r',linewidth=2,label=events[1])
-		ax.fill_between(np.arange(c1_mean.size),c1_h1,c1_h2,
-			color='b',alpha=0.5)
-		ax.fill_between(np.arange(c2_mean.size),c2_h1,c2_h2,
-			color='r',alpha=0.5)
-		if n >= n_sig-5:
-			ax.set_xlabel("Bins",fontsize=12)
-		else:
-			ax.set_xticklabels([])
-		if n % 5 == 0:
-			ax.set_ylabel("FR, z-score",fontsize=12)
-		else:
-			ax.set_yticklabels([])
-		ax.set_title("Unit "+str(sig_idx[n]),fontsize=12)
-		if n == 0:
-			ax.legend(bbox_to_anchor=(0.1, 0.1))
-	##now do the non-significant figures
-	for n in range(n_nonsig):
-		idx = nonsig_idx[n]
-		##the data for this unit
-		c1_mean, c1_h1, c1_h2 = mean_and_sem(X[idx,idx_c1,:])
-		c2_mean, c2_h1, c2_h2 = mean_and_sem(X[idx,idx_c2,:])
-		##the subplot axis for this unit's plot
-		ax = nonsigfig.add_subplot(nonsig_rows,5,n+1)
-		ax.plot(c1_mean,color='b',linewidth=2,label=events[0])
-		ax.plot(c2_mean,color='r',linewidth=2,label=events[1])
-		ax.fill_between(np.arange(c1_mean.size),c1_h1,c1_h2,
-			color='b',alpha=0.5)
-		ax.fill_between(np.arange(c2_mean.size),c2_h1,c2_h2,
-			color='r',alpha=0.5)
-		if n >= n_sig-5:
-			ax.set_xlabel("Bins",fontsize=12)
-		else: 
-			ax.set_xticklabels([])
-		if n % 5 == 0:
-			ax.set_ylabel("FR, z-score",fontsize=12)
-		else: 
-			ax.set_yticklabels([])
-		ax.set_title("Unit "+str(nonsig_idx[n]),fontsize=12)
-		if n == 0:
-			ax.legend(bbox_to_anchor=(1.2, 1.2))
-	##finish up
-	sigfig.suptitle("Units with significant (P<.05) predictability",fontsize=14)
-	nonsigfig.suptitle("Units with non-significant predicability",fontsize=14)
-	#sigfig.tight_layout()
-	#nonsigfig.tight_layout()
-
-"""
-Another function to plot individual unit results from logistic regression (for one session).
-This one plots only the significant units, but looks at activity over all epochs
-Inputs:
-	-f_in: the data file for logistic regression results
-"""
-def plot_log_units2(f_in):
-	##open the file
-	f = h5py.File(f_in,'r')
-	current_file = f_in[-11:-5]
-	## a LUT for different legend labels
-	LUT = {
-	'block_type':['Upper rewarded','Lower rewarded'],
-	'choice':['Upper lever',"Lower lever"],
-	'reward':['Rewarded','Unrewarded']
-	}
-	##determine some metadata about this file
-	epochs = ['choice','delay','outcome'] ##this isn't everything but all I want to use for now
-	conditions = ['block_type','choice','reward']
-	##we already have a function that will give us all of the units with any significant
-	##predictability, so let' use it
-	cond_idx,cond_ps,multis,n_sig,n_total = sa.parse_log_regression(f_in,epochs) ##n_sig is the array of all sig units
-	##make a separate plot for each unit
-	for t,sig_idx in enumerate(n_sig):
-		fig = plt.figure()
-		gs = gridspec.GridSpec(len(epochs),len(conditions))
-		##outer loop is for plotting epochs (columns)
-		for n, epoch in enumerate(epochs):
-			##get the data matrix for this epoch
-			X = np.asarray(f[epoch]['X'])
-			##inner loop is for task variables
-			for m, condition in enumerate(conditions):
-				##now plot the data
-				ax = plt.subplot(gs[m,n])
-				##get the y-data for the choices
-				y = np.asarray(f[epoch][condition]['y'])
-				##index of trials for the different conditions
-				idx_c1 = np.where(y==0)[0]
-				idx_c2 = np.where(y==1)[0]
-				m_c1 = np.mean(X[idx_c1,sig_idx,:],axis=0) 
-				se_c1 = scipy.stats.sem(X[idx_c1,sig_idx,:],axis=0)
-				m_c2 = np.mean(X[idx_c2,sig_idx,:],axis=0) 
-				se_c2 = scipy.stats.sem(X[idx_c2,sig_idx,:],axis=0)
-				##if it's the first row, add a title
-				if m == 0:
-					ax.set_title(epoch,fontsize=14,weight='bold')
-				##if it's the first column, add a y-axis label
-				if n == 0:
-					ax.set_ylabel("zscore FR for\n"+condition,fontsize=14,weight='bold')
-				else:
-					ax.set_yticklabels([])
-				if m == len(conditions)-1:
-					ax.set_xlabel("Bins",fontsize=14)
-				else:
-					ax.set_xticklabels([])
-				ax.plot(m_c1,color='b',linewidth=2,label=LUT[condition][0])
-				ax.plot(m_c2,color='r',linewidth=2,label=LUT[condition][1])
-				ax.fill_between(np.arange(m_c1.size),m_c1-se_c1,m_c1+se_c1,
-					color='b',alpha=0.5)
-				ax.fill_between(np.arange(m_c2.size),m_c2-se_c2,m_c2+se_c2,
-					color='r',alpha=0.5)
-				##add text to signify the prediction strength
-				if sig_idx in cond_idx[condition]:
-					ax.text(0.1,0.1,"*",fontsize=16,weight='bold',transform=ax.transAxes)
-				if n == 0:
-					ax.set_ylabel("zscore FR for\n"+condition,fontsize=14,weight='bold')
-					ax.legend()
-				else:
-					ax.set_yticklabels([])
-		fig.suptitle("Unit "+str(sig_idx),fontsize=16)
-	f.close()		
-	##TODO identify for which epochs the unit is significant,and add text about the encoding strength
 
 
 """
@@ -1578,37 +1174,47 @@ Inputs:
 	Z: transformed spike matrix (output from dpca.session_dpca)
 	time: time axis (output from dpca.session_dpca)
 """
-def plot_dpca_results(Z,time,sig_masks,var_explained,events,n_components=3):
-	##get the condition LUT dictionary from the dpca module
-	LUT = dpca.condition_LUT
+def plot_dpca_results(Z,var_explained,sig_masks,conditions,bin_size,pad=None,n_components=3):	
 	##set up the figure
 	fig = plt.figure()
-	n_conditions = len(list(LUT))
+	##add time and interaction as a conditions
+	conditions = ['time']+conditions+['interaction']
+	n_conditions = len(conditions)
+	c_idx = list(Z) ##the letters used to index the conditions in Z
+	##get scaled time axis
+	time = np.linspace(0,bin_size*Z['t'].shape[-1],Z['t'].shape[-1])
 	##we'll plot the first n dPC's for each condition
-	for c in range(n_conditions):
-		condition = list(LUT)[c]
-		title = LUT[condition]
-		data = Z[condition]
+	axes = []
+	for c in range(len(conditions)):
+		condition = conditions[c]
+		data = Z[c_idx[c]]
 		for p in range(n_components):
 			plotnum = (c*n_components+p)+1
 			ax = fig.add_subplot(n_conditions,n_components,plotnum)
-			ax.plot(time,data[p,0,0,:],color='r',linewidth=2,label='Upper lever, correct')
-			ax.plot(time,data[p,1,1,:],color='b',linewidth=2,label='Lower lever, correct')
-			ax.plot(time,data[p,0,1,:],color='b',linewidth=2,label='Lower lever, incorrect',
+			##plot both kinds of trials for each condition
+			ax.plot(time,data[p,0,0,:],color='r',linewidth=2,
+				label=dpca.condition_pairs[conditions[1]][0]+",\n"+dpca.condition_pairs[conditions[2]][0])
+			ax.plot(time,data[p,0,1,:],color='r',linewidth=2,
+				label=dpca.condition_pairs[conditions[1]][0]+",\n"+dpca.condition_pairs[conditions[2]][1],
 				linestyle='dashed')
-			ax.plot(time,data[p,1,0,:],color='r',linewidth=2,label='Upper lever, incorrect',
-				linestyle='dashed')
-			##now get the significance masks (unless there isn't one)
+			##now for the second condition
+			ax.plot(time,data[p,1,0,:],color='b',linewidth=2,
+				label=dpca.condition_pairs[conditions[1]][1]+",\n"+dpca.condition_pairs[conditions[2]][0])
+			ax.plot(time,data[p,1,1,:],color='b',linewidth=2,
+				label=dpca.condition_pairs[conditions[1]][1]+",\n"+dpca.condition_pairs[conditions[2]][1],
+			linestyle='dashed')
+			##now get the significance masks (unless there isn't one, like for time)
 			try:
-				mask = sig_masks[condition][p]
+				mask = sig_masks[c_idx[c]][p]
 				sigx = np.where(mask==True)[0]
 				sigy = np.ones(sigx.size)*ax.get_ylim()[0]
 				ax.plot(sigx,sigy,color='k',linewidth=2)
 			except KeyError:
 				pass
-			##now plot the lines corresponding to the events
-			plt.vlines(events,ax.get_ylim()[0],ax.get_ylim()[1],linestyle='dashed',
-				color='k',alpha=0.5)	
+			##now plot the lines corresponding to the events, if requested
+			if pad is not None:
+				plt.vlines(np.array([pad[0],time.max()-pad[1]]),ax.get_ylim()[0],ax.get_ylim()[1],
+					linestyle='dashed',color='k',alpha=0.5)
 			if c+1 == n_conditions:
 				ax.set_xlabel('Time in trial, ms',fontsize=14)
 				for tick in ax.xaxis.get_major_ticks():
@@ -1617,12 +1223,14 @@ def plot_dpca_results(Z,time,sig_masks,var_explained,events,n_components=3):
 			else: 
 				ax.set_xticklabels([])
 			if p == 0:
-				ax.set_ylabel(title,fontsize=14)
+				ax.set_ylabel(condition,fontsize=14)
 			for tick in ax.yaxis.get_major_ticks():
 				tick.label.set_fontsize(14)
 			ax.locator_params(axis='y',tight=True,nbins=4)
 			if c == 0:
 				ax.set_title("Component "+str(p),fontsize=14)
+			axes.append(ax)
+	axes[2].legend(bbox_to_anchor=(1,1))
 	##now do a second plot that shows the variance explained by the combination
 	##of all components
 	fig,ax = plt.subplots(1)

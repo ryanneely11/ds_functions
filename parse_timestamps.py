@@ -140,227 +140,6 @@ def get_event_data(f_behavior):
 	return results
 
 
-
-"""
-A function that takes in a behavior timestamps file (HDF5)
-and returns an array of timestamps, as well as an index
-of what catagory each trial falls into (ie rewarded, unrewarded, 
-upper lever, etc)
-Inputs:
-	-f_in: file path to where the data is
-	-remove_unrew: if True, excludes trials where the response was correct,
-		but the trial was still unrewarded
-Returns:
-	-ts: trial x event array. Axis 0 is trials, axis 1 is action, outcome
-	-ts_idx: dictionary of array containing the indices of different 
-		trial types.
-"""
-def get_trial_data(f_in,remove_unrew=False):
-	ts_idx = {}
-	##sort_by_trial does most of the work:
-	block_data = sort_by_trial(f_in,remove_unrew=remove_unrew)
-	##now just parse the TS a little further
-	block_types = list(block_data) ##keep the block order (upper_rewarded, etc consistent)
-	##make sure we only have 2 block types (excpected)
-	assert len(block_types) == 2
-	##concatenate the data from both block types
-	ts = np.vstack((block_data[block_types[0]],block_data[block_types[1]]))
-	##add the indices of the different block types to the dict
-	block1_len = block_data[block_types[0]].shape[0]
-	block2_len = block_data[block_types[1]].shape[0]
-	ts_idx[block_types[0]] = np.arange(block1_len)
-	ts_idx[block_types[1]] = np.arange(block1_len,block1_len+block2_len)
-	##get rid of dim 0 of the TS (containins arbitrary trial start timestamps)
-	ts = ts[:,1:]
-	##any negative action ts (now first index in dim 0) indicate a trial where the lower lever
-	##was pushed:
-	ts_idx['lower_lever'] = np.where(ts[:,0]<0)[0]
-	##any positive action ts mean the upper lever was pushed:
-	ts_idx['upper_lever'] = np.where(ts[:,0]>0)[0]
-	##any negative outcome ts mean that trial was unrewarded:
-	ts_idx['unrewarded'] = np.where(ts[:,1]<0)[0]
-	##and finally any positive outcome ts mean the trial was rewarded:
-	ts_idx['rewarded'] = np.where(ts[:,1]>0)[0]
-	##now we can get rid of the negative ts values:
-	ts = abs(ts)
-	##let's perform a check to see if any of the timestamps don't make sense
-	if np.any(ts[:,1]-ts[:,0]<0):
-		print("Warning: detected at least 1 timestamp out of order. Check source file...")
-	##return the results:
-	return ts,ts_idx
-
-
-""" a function to split behavior timestamp data into individual trials.
-	Inputs:
-		f_in: the file path pointing to an hdf5 file containing
-		the behavior event time stamps
-		-remove_unrew: if True, excludes trials where the response was correct,
-			but the trial was still unrewarded
-	Returns: 
-		Two n-trial x i behavioral events-sized arrays.
-		One contains all trials where the lower lever is rewarded;
-		The other contains all the trials where the upper lever is rewarded. 
-		Behavioral events are indexed temporally:
-		0-trial start; 1-action (U or L); 2-poke(R or U)
-"""
-def sort_by_trial(f_in,remove_unrew=False):
-	#load data file
-	f = h5py.File(f_in,'r')
-	#get the arrays of timestamps into a dictionary in memory
-	data_dict = {
-		'lower_lever':np.asarray(f['bottom_lever']),
-		'upper_lever':np.asarray(f['top_lever']),
-		'reward_idle':np.asarray(f['reward_idle']),
-		'reward_primed':np.asarray(f['reward_primed']),
-		'rewarded_poke':np.asarray(f['rewarded_poke']),
-		'unrewarded_poke':np.asarray(f['unrewarded_poke']),
-		'trial_start':np.asarray(f['trial_start']),
-		'session_end':np.asarray(f['session_length']),
-		'lower_rewarded':np.asarray(f['bottom_rewarded']),
-		'upper_rewarded':np.asarray(f['top_rewarded']),
-	}
-	f.close()
-	##create the output dictionary
-	result = {}
-	##get the dictionary containing the block information
-	block_times = get_block_times(data_dict['lower_rewarded'],data_dict['upper_rewarded'],
-		data_dict['session_end'])
-		##start with all of the lower lever blocks
-	try:	
-		for lb in range(len(block_times['lower'])):
-			block_data = get_block_data(block_times['lower'][lb],data_dict)
-			trial_times = sort_block(block_data)
-			##remove correct unrewarded, if requested
-			if remove_unrew:
-				trial_times = remove_correct_unrewarded(trial_times,'lower_rewarded')
-			##case where there is a dictionary entry
-			try:
-				result['lower_rewarded'] = np.vstack((result['lower_rewarded'],trial_times))
-			except KeyError:
-				result['lower_rewarded'] = trial_times
-	except KeyError:
-		pass
-	##repeat for upper lever blocks
-	try:
-		for ub in range(len(block_times['upper'])):
-			block_data = get_block_data(block_times['upper'][ub],data_dict)
-			trial_times = sort_block(block_data)
-			##remove correct unrewarded, if requested
-			if remove_unrew:
-				trial_times = remove_correct_unrewarded(trial_times,'upper_rewarded')
-			##case where there is a dictionary entry
-			try:
-				result['upper_rewarded'] = np.vstack((result['upper_rewarded'],trial_times))
-			except KeyError:
-				result['upper_rewarded'] = trial_times
-	except KeyError:
-		pass
-	return result
-
-
-
-"""
-A helper function for sort_by_trial; sorts out trials for one block.
-Inputs:
-	-block_data: a dictionary containing all the timestamps
-	for one block, which is a period of time in which the lever-
-	reward contingency is constant.
-	-trial_max: maximum trial length to tolerate
-Returns:
-	an n-trial by i behavioral events-sized array
-
-	****													****
-	****Important: in order to simplify the output arrays, 	****
-	****I'm going to use a positive/negative code in the following way:
-		For each trial:
-			-Timestamp 0 = the start of the trial
-			-Timestamp 1 = action; negative number = lower lever; positive = upper lever
-			-Timestamp 2 = outcome; negative number = unrewarded; positive = rewarded
-"""
-def sort_block(block_data,trial_max=5):
-	##let's define the order of events that we want:
-	ordered_events = ['start','action','outcome']
-	##allocate memory for the result array
-	result = np.zeros((block_data['trial_start'].size,3))
-	##fill the results array for each trial
-	for i in range(result.shape[0]):
-		trial_start = block_data['trial_start'][i] ##the start of this trial
-		try: 
-			trial_end = block_data['trial_start'][i+1]
-		except IndexError:
-			trial_end = max(block_data['rewarded_poke'].max(),
-							block_data['unrewarded_poke'].max())
-		##***ACTIONS***
-
-		##now find the first action
-		#idx of any upper presses in the interval
-		upper_idx = np.nonzero(np.logical_and(block_data['upper_lever']>trial_start,
-			block_data['upper_lever']<trial_end))[0]
-		lower_idx = np.nonzero(np.logical_and(block_data['lower_lever']>trial_start,
-			block_data['lower_lever']<trial_end))[0]
-		##case 1: both upper and lower lever presses happened
-		if upper_idx.size>0 and lower_idx.size>0:
-			##find which action happened first
-			upper_presses = block_data['upper_lever'][upper_idx] ##the actual timestamps
-			lower_presses = block_data['lower_lever'][lower_idx]
-			##if the first upper press happened first:
-			if upper_presses.min()<lower_presses.min():
-				action = upper_presses.min()
-			elif lower_presses.min()<upper_presses.min():
-				action = -1*lower_presses.min()
-			else:
-				##error case
-				print("something wrong in upper/lower comparison")
-				break
-		#case 2: only upper lever was pressed
-		elif upper_idx.size>0 and lower_idx.size==0:
-			action = block_data['upper_lever'][upper_idx].min()
-		##case 3: only lower lever was pressed
-		elif upper_idx.size==0 and lower_idx.size>0:
-			action = -1*block_data['lower_lever'][lower_idx].min()
-		##case 4: something is wrong!
-		else:
-			print("Error- no action for this trial??")
-			break
-		
-		##***OUTCOMES***
-		
-		##ts of any rewarded pokes
-		reward_idx = np.nonzero(np.logical_and(block_data['rewarded_poke']>trial_start,
-			block_data['rewarded_poke']<=trial_end))[0]
-		##case where this was a rewarded trial
-		if reward_idx.size == 1:
-			outcome = block_data['rewarded_poke'][reward_idx]
-		##case where this was not a rewarded trial
-		elif reward_idx.size == 0:
-			##let's get the unrewarded ts
-			unreward_idx = np.nonzero(np.logical_and(block_data['unrewarded_poke']>trial_start,
-				block_data['unrewarded_poke']<=trial_end))[0]
-			if unreward_idx.size > 0:
-				unrewarded_pokes = block_data['unrewarded_poke'][unreward_idx]
-				outcome = -1*unrewarded_pokes.min()
-			else:
-				print("Error: no pokes for this trial")
-				break
-		else:
-			print("error: too many rewarded pokes for this trial")
-			break
-
-		##now add the data to the results
-		result[i,0] = trial_start
-		result[i,1] = action
-		result[i,2] = outcome
-	##now make sure none of the trials violate the max trial duration
-	t = 0
-	while t < result.shape[0]:
-		if (abs(result[t,2])-abs(result[t,1])) >= trial_max:
-			print("removing trial of length "+str(abs(result[t,2])-abs(result[t,1])))
-			result = np.delete(result,t,axis=0)
-		else:
-			t+=1
-	return result
-
-
 """
 A helper function for sort_by_trial; determines how many blocks
 are in a file, and where the boundaries are. 
@@ -411,43 +190,6 @@ def get_block_times(lower_rewarded, upper_rewarded,session_end,min_length=5*60):
 			spurious +=1
 	if spurious > 0:
 		print("Cleaned "+str(spurious)+" spurious block switches")
-	return result
-
-
-"""
-another helper function. This one takes in a block start, stop
-time and returns only the subset of timestamps that are within
-that range.
-Inputs:
-	block_edges: an array [start,stop]
-	data_dict: the dictionary of all the different timestamps
-Outputs:
-	a modified data dictionary with only the relevant data
-"""
-def get_block_data(block_edges,data_dict):
-	result = {} #dict to return
-	keys = list(data_dict)
-	for key in keys:
-		data = data_dict[key]
-		idx = np.nonzero(np.logical_and(data>block_edges[0],data<=block_edges[1]))[0]
-		result[key] = data[idx]
-	##figure out if the last trial was completed; if not get rid of it
-	last_trial = result['trial_start'].max()
-	##need some error catching here in case there were no upper or lower levers in this block
-	try:
-		last_upper = result['upper_lever'].max()
-	except ValueError: ##case of empty array
-		last_upper = np.array([0])
-	try:
-		last_lower = result['lower_lever'].max()
-	except ValueError:
-		last_lower = np.array([0])
-	last_action = max(last_upper,last_lower)
-	last_poke = max(result['rewarded_poke'].max(),result['unrewarded_poke'].max())
-	if (last_trial < last_action) and (last_trial < last_poke):
-		pass
-	else:
-		result['trial_start'] = np.delete(result['trial_start'],-1)
 	return result
 
 
@@ -617,72 +359,22 @@ def which_block(results,ts):
 
 
 """
-A helper function to get presses of all kinds occurring during a particular
-context
+A helper function to remove the last trial, in a set of data, if the session ended
+before the conclustion of the trial.
 Inputs:
-	-upper_rewarded: array of switches to upper lever rewarded
-	-lower_rewarded: ditto for lower lever
-	-session_length: 
-	-context, the context to get lever presses for
+	ts, ts_ids: cleaned output arrays from get_mixed events that have been passed through
+		remove_lever_accidents and remove_duplicate pokes
 Returns:
-	-context_presses: timestamps of all presses that occur in the given context
+	ts, ts_ids: duplicate arrays to the input, but if the last trial did not finish it is removed.
 """
-def get_context_levers(upper_rewarded,lower_rewarded,upper_lever,lower_lever,
-	session_length,context):
-	##start by getting the block boundaries
-	block_times = get_block_times(lower_rewarded,upper_rewarded,session_length)
-	##now just get the periods for the context that we care about
-	block_windows = block_times[context]
-	##now get the timestamps of all presses in each block
-	presses = []
-	for block in block_windows:
-		##upper and lower lever timestamp arrays contain all the presses
-		idx_upper = np.nonzero(np.logical_and(upper_lever>=block[0],
-			upper_lever<=block[1]))[0]
-		idx_lower = np.nonzero(np.logical_and(lower_lever>=block[0],
-			lower_lever<=block[1]))[0]
-		presses.append(upper_lever[idx_upper])
-		presses.append(lower_lever[idx_lower])
-	presses = np.concatenate(presses)
-	return presses
-"""
-A helper function to clean an array of block times.
-Sometimes the raspberry pi had a glitch where it would
-record multiple block switches in a row. Since we know that no block
-was ever less than 5 mins, we can exclude get rid of these spurious block switches.
-Inputs:
-	upper_rewarded: an array of putative upper rewarded block switch times
-	lower_rewarded: an array of putative lower rewarded block switch times
-	threshold: shortest allowable block, in s
-Returns: 
-	clean_upper: a copy of the input array with false block switch times removed
-	clean_lower: ditto
-"""
-# def clean_block_times(upper_rewarded,lower_rewarded,threshold=5*60):
-# 	##first clean each set of times separately
-# 	keep_upper = np.concatenate((np.array([0]),np.where(np.diff(upper_rewarded>threshold))[0]+1))
-# 	keep_lower = np.concatenate((np.array([0]),np.where(np.diff(lower_rewarded>threshold))[0]+1))
-# 	upper_rewarded = upper_rewarded[keep_upper]
-# 	lower_rewarded = lower_rewarded[keep_lower]
-# 	##add all the block switch times together, and create an index array
-# 	times = np.concatenate((upper_rewarded,lower_rewarded))
-# 	upper_ids = np.empty(upper_rewarded.size,dtype='object')
-# 	upper_ids[:] = 'upper_rewarded'
-# 	lower_ids = np.empty(lower_rewarded.size,dtype='object')
-# 	lower_ids[:] = 'lower_rewarded'
-# 	ids = np.concatenate((upper_ids,lower_ids))
-# 	##now sort the times and indices
-# 	idx = np.argsort(times)
-# 	times = times[idx]
-# 	ids = ids[idx]
-# 	##indices to keep
-# 	valid_idx = np.where(np.diff(times)>threshold)[0]
-# 	invalid_idx = np.where(np.diff(times)<threshold)[0]
-# 	if invalid_idx.size>0:
-# 		print("Cleaning "+str(len(invalid_idx))+" spurious block switches")
-# 	clean_times = times[valid_idx]
-# 	clean_ids = ids[valid_idx]
-# 	upper_idx = np.where(clean_ids=='upper_rewarded')[0]
-# 	lower_idx = np.where(clean_ids=='lower_rewarded')[0]
-# 	return clean_times[upper_idx],clean_times[lower_idx]
+def check_last_trial(ts,ts_ids):
+	##start by getting the index of the last trial start
+	last_trial_start = np.where(ts_ids=='trial_start')[0][-1]
+	##now get a slice containing the event ids following the start of the last trial
+	last_ids = ts_ids[last_trial_start:]
+	##check to see if there was a poke in this slice, meaning the trial concluded
+	if not ('rewarded_poke' in last_ids or 'unrewarded_poke' in last_ids):
+		ts, ts_ids = ts[:last_trial_start], ts_ids[:last_trial_start]
+	return ts, ts_ids
+
 

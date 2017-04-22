@@ -2,30 +2,20 @@
 ##functions for implementing dPCA, using the library from Kobak et al, 2016
 
 import numpy as np
-# from dPCA import dPCA
+from dPCA import dPCA
 import parse_timestamps as pt
 import parse_ephys as pe
 import collections
 from scipy import interpolate
 from scipy.stats import zscore
-
-##some global variables that are specific to my current project
-condition_pairs = [
-('upper_rewarded','lower_rewarded'),
-('upper_lever','lower_lever')]
-
-conditions = [
-'block_type',
-'choice']
-
-condition_LUT = collections.OrderedDict()
-condition_LUT['t'] = "Independent"
-condition_LUT['bt'] = "Blocktype"
-condition_LUT['ct'] = "Choice"
-condition_LUT['cbt'] = "Interaction"
+import parse_trials as ptr
 
 ###TODO: get datasets for everything, combined
-
+condition_pairs = {
+	'context':['upper_rewarded','lower_rewarded'],
+	'action':['upper_lever','lower_lever'],
+	'outcome':['rewarded_poke','unrewarded_poke']
+}
 
 """
 A function to get a dataset in the correct format to perform dPCA on it.
@@ -33,119 +23,56 @@ Right now this function is designed to just work on one session at a time;
 based on the eLife paper though we may be able to expand to looking at many
 datasets over many animals.
 Inputs:
-	f_behavior: path to the behavior timestamps
-	f_ephys: path to the spike data
+	f_behavior: file path to behavior data
+	f_ephys: file path to ephys data
+	conditions: should be two of the following: 'context', action', or 'outcome'. Can't be all three because
+		there is no such thing as a rewarded trial with upper lever contex and lower lever action.
 	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
 	smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
 		with index 0 being the gaussian width and index 1 being the bin width
 	pad: a window for pre- and post-trial padding, in ms. In other words, an x-ms period of time 
 		before lever press to consider the start of the trial, and an x-ms period of time after
-		reward to consider the end of the trial
+		reward to consider the end of the trial. For best results, should be a multiple of the bin size
 	z_score: if True, z-scores the array
-	timestretch: if True, uses the time stretching function (below) to equate the lengths of all trials.
-	remove_unrew: if True, excludes trials that were correct but unrewarded.
+	trial_duration: specifies the trial length (in ms) to squeeze trials into. If None, the function uses
+		the median trial length over the trials in the file
+	min_rate: the min spike rate, in Hz, to accept. Units below this value will be removed.
+	max_duration: maximum allowable trial duration (ms)
 Returns:
-	X_mean: data list of shape n-neurons x condition-1 x condition-2, ... x n-timebins
-	X_trials: data from individual trials: n-trials x n-neurons x condition-1, condition-2, ... x n-timebins.
-		If data is unbalanced (ie different #'s of trials per condition), max dimensions are used and empty
-		spaces are filled with NaN
+	X_c: data from individual trials: n-trials x n-neurons x condition-1, condition-2, ... x n-timebins.
 """
 
-def get_dataset(f_behavior,f_ephys,smooth_method='both',smooth_width=[40,50],
-	pad=[200,200],z_score=True,remove_unrew=True):
-	##use global parameters here
+def get_dataset(f_behavior,f_ephys,conditions,smooth_method='both',smooth_width=[80,40],pad=[400,400],
+	z_score=True,trial_duration=None,max_duration=5000,min_rate=0.1,balance=True):
 	global condition_pairs
-	###most of the work is done by our other function. Get the data separated from all
-	##trials, and the indices of trials from each condition:
-	X_all,ts_idx = split_trials(f_behavior,f_ephys,smooth_method=smooth_method,
-		smooth_width=smooth_width,pad=pad,z_score=z_score,
-		timestretch=True,remove_unrew=remove_unrew)
-	##now the data is in dims trials x neurons x time
-	##get some meta about this data:
-	n_neurons = X_all.shape[1]
-	n_bins = X_all.shape[2]
-	##the max number of trials in any condition pair
-	n_trials = 0
-	for val in ts_idx.values():
-		if val.shape[0] > n_trials:
-			n_trials = val.shape[0]
-	##container for the whole thing
-	condition_sizes = []
-	for i in range(len(condition_pairs)):
-		condition_sizes.append(len(condition_pairs[i]))
-	datashape = [n_trials,n_neurons]+condition_sizes+[n_bins]
-	X_trials = np.zeros(datashape)
-	##construct the data arrays for each condition independently
-	for i in range(len(condition_pairs)):
-		##make a container for this dataset. It will be shape:
-		##trials x neurons x groups in this condition x timebins
-		dset = np.empty((len(condition_pairs[i]),n_trials,n_neurons,n_bins))
-		dset[:] = np.nan
-		for p in range(len(condition_pairs[i])):
-			key = condition_pairs[i][p]
-			idx = ts_idx[key]
-			data = X_all[idx,:,:]
-			dset[p,0:data.shape[0],:,:] = data
-		##now add this to the master container. Things get complicated, because
-		##we need to iterate over the middle axes for an arbitrary number of axes...
-		##****THE LINE BELOW MUST BE CHANGED FOR A DIFF NUM OF CONDITIONS****
-		###Don't know how to iterate the None,None, axes in the dset...
-		np.rollaxis(X_trials,i+2)[:,:,:,:,:] += dset[:,:,:,None,:] 
-	##Now to get X_mean (average over trials) we just take the average...
-	X_mean = np.nanmean(X_trials,axis=0)
-	return X_mean,X_trials
+	##get the spike dataset, and the trial info
+	X,trial_data = ptr.get_trial_spikes(f_behavior=f_behavior,f_ephys=f_ephys,smooth_method=smooth_method,
+		smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=trial_duration,
+		max_duration=max_duration,min_rate=min_rate)
+	##get some metadata about this session
+	n_units = X.shape[1]
+	n_bins = X.shape[2]
+	if balance:
+		trial_index,n_trials = balance_trials(trial_data,conditions)
+	else:
+		trial_index,n_trials = unbalance_trials(trial_data,conditions)
+	trial_types = list(trial_index)
+	##allocate space for the dataset
+	X_c = np.empty((n_trials,n_units,len(condition_pairs[conditions[0]]),
+		len(condition_pairs[conditions[1]]),n_bins))
+	X_c[:] = np.nan
+	for t in trial_index.keys():
+		##based on the key, figure out where these trials should be placed in the dataset
+		##I **think** that we should always expect the context[0] trial type to be the first part of the string
+		c1_type = t[:t.index('+')]
+		c2_type = t[t.index('+')+1:]
+		c1_idx = condition_pairs[conditions[0]].index(c1_type)
+		c2_idx = condition_pairs[conditions[1]].index(c2_type)
+		##now add the data to the dataset using these indices
+		for i,j in enumerate(trial_index[t]):
+			X_c[i,:,c1_idx,c2_idx,:] = X[j,:,:]
+	return X_c
 
-"""
-A function to get a data array of trials for a given session.
-Resulting data array is in the order n_trials x n_neurons x n_timpoints.
-Also returned is a ductionary with information about trial types.
-Inputs:
-	f_behavior: path to the behavior timestamps
-	f_ephys: path to the spike data
-	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
-	smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
-		with index 0 being the gaussian width and index 1 being the bin width
-	pad: a window for pre- and post-trial padding, in ms. In other words, an x-ms period of time 
-		before lever press to consider the start of the trial, and an x-ms period of time after
-		reward to consider the end of the trial
-	z_score: if True, z-scores the array
-	timestretch: if True, uses the time stretching function (below) to equate the lengths of all trials.
-Returns:
-	X: data list of shape n-trials x n-neurons x n-timebins
-	ts_idx: dictionary indicating which subsets of trials belong to various trial types
-"""
-def split_trials(f_behavior,f_ephys,smooth_method='bins',smooth_width=50,
-	pad=[200,200],z_score=False,timestretch=False,remove_unrew=False):
-	##get the raw data matrix first 
-	X_raw = pe.get_spike_data(f_ephys,smooth_method='none',smooth_width=None,
-		z_score=False) ##don't zscore or smooth anything yet
-	##now get the window data for the trials in this session
-	ts,ts_idx = pt.get_trial_data(f_behavior,remove_unrew=remove_unrew) #ts is shape trials x ts, and in seconds
-	##now, convert to ms and add padding 
-	ts = ts*1000.0
-	trial_wins = ts.astype(int) ##save the raw ts for later, and add the padding to get the full trial windows
-	trial_wins[:,0] = trial_wins[:,0] - pad[0]
-	trial_wins[:,1] = trial_wins[:,1] + pad[1]
-	##convert this array to an integer so we can use it as indices
-	trial_wins = trial_wins.astype(int)
-	##now get the windowed data around the trial times. Return value is a list of the trials
-	X_trials = pe.X_windows(X_raw,trial_wins)
-	##now do the smoothing, if requested
-	if smooth_method != 'none':
-		for t in range(len(X_trials)):
-			X_trials[t] = pe.smooth_spikes(X_trials[t],smooth_method,smooth_width)
-	##now, do timestretching, if requested
-	if timestretch:
-		##first step is to get the proper timestamps.
-		##we want to use the original ts, because they contain actual event times and not trial start/stop
-		##if data is binned, then we need the timestamps in terms of bins
-		ts_rel = get_relative_ts(ts,pad,smooth_method,smooth_width)
-		##now run the data through the function
-		X_trials = stretch_trials(X_trials,ts_rel)
-	##now z-score, if requested
-	if z_score:
-		X_trials = zscore_across_trials(X_trials)
-	return X_trials, ts_idx
 
 
 """
@@ -153,27 +80,28 @@ This function actually runs dpca, relying on some globals for
 the details. ***NOTE: there are some hard-to-avoid elements here that are
 			hardcoded specificallyfor this dataset.*****
 Inputs:
-	X_mean: array of data averaged over trials
 	X_trials: array of data including individual trial data
+	n_components: the number of components to fit
+	conditions: list of conditions used to generate the dataset
 """
-def run_dpca(X_mean,X_trials,n_components):
-###########
-##HARDCODED ELEMENTS-CHANGE FOR DIFFERENT EXPERIMENT PARAMS
-##########
-	labels = 'cbt'
-	join = {'ct':['c','ct'],'bt':['b','bt'],'cbt':['cb','cbt']}
-##########
-##END HARDCODED
-#########
+def run_dpca(X_trials,n_components,conditions):
+	##create labels from the first letter of the conditions
+	##***this might not work if the implementation changes***
+	labels = conditions[0][0]+conditions[1][0]+'t'
+	#create a dictionary argument that joins the time- and condition-dependent components
+	join = {}
+	for l in labels[:-1]:
+		join[l+'t'] = [l,l+'t']
+	join[labels[0]+labels[1]+'t'] = [labels[0]+labels[1],labels[0]+labels[1]+'t']
 	##initialize the dpca object
 	dpca = dPCA.dPCA(labels=labels,join=join,n_components=n_components,
 		regularizer='auto')
 	dpca.protect = ['t']
-	Z = dpca.fit_transform(X_mean,X_trials)
+	Z = dpca.fit_transform(np.nanmean(X_trials,axis=0),X_trials)
 	##Next, get the variance explained:
 	var_explained = dpca.explained_variance_ratio_
 	##finally, get the significance masks (places where the demixed components are significant)
-	sig_masks = dpca.significance_analysis(X_mean,X_trials,axis='t',
+	sig_masks = dpca.significance_analysis(np.nanmean(X_trials,axis=0),X_trials,axis='t',
 		n_shuffles=100,n_splits=10,n_consecutive=2)
 	return Z,var_explained,sig_masks	
 
@@ -184,6 +112,12 @@ linear stretching procedure, outlined in
 "Kobak D, Brendel W, Constantinidis C, et al. Demixed principal component analysis of neural population data. 
 van Rossum MC, ed. eLife. 2016;5:e10989. doi:10.7554/eLife.10989."
 
+The function makes some important assumptions about the data:
+1) that there is even pre- and post- padding before an action timestamp and outcome timestamp, respectively
+	##actually this supports more epochs than just one, but I have no use for it yet
+2) following this, that the epoch that needs to be stretched is the time between action and outcome.
+3) the requested duruation passed as an argument applies to this middle epoch
+
 Inputs:
 	X_trials: a list containing ephys data from a variety of trials. This function assumes
 		that trials are all aligned to the first event. data for each trial should be cells x timebins
@@ -191,51 +125,46 @@ Inputs:
 		***These timestamps should be relative to the start of each trial. 
 			for example, if a lever press happens 210 ms into the start of trial 11,
 			the timestamp for that event should be 210.***
+	median_dur: the duration to stretch the middle epoch to, such that all trials are the same length
 
 """
-def stretch_trials(X_trials,ts,median_dur=None):
+def stretch_trials(X_trials,ts,median_dur):
 	##determine how many events we have
 	n_events = ts.shape[1]
 	##and how many trials
 	n_trials = len(X_trials)
 	##and how many neurons
-	n_neurons = 0
-	for i in range(len(X_trials)):
-		if X_trials[i].shape[0] > n_neurons:
-			n_neurons = X_trials[i].shape[0]
+	n_neurons = X_trials[0].shape[0]
 	pieces = [] ##this will be a list of each streched epoch piece
 	##check to see if the first event is aligned to the start of the data,
 	##or if there is some pre-event data included.
-	if not np.all(ts[:,0]==0):
+	if not np.all(ts[:,1]==0):
 		##make sure each trial is padded the same amount
-		if np.all(ts[:,0]==ts[0,0]):
-			pad1 = ts[0,0] ##this should be the pre-event window for all trials
+		if np.all(ts[:,1]==ts[0,1]):
+			pad1 = ts[0,1] ##this should be the pre-event window for all trials
 			##add this first piece to the collection
-			data = np.empty((n_trials,n_neurons,pad1))
-			data[:] = np.nan
+			data = np.zeros((n_trials,n_neurons,pad1))
 			for t in range(n_trials):
-				data[t,0:X_trials[t].shape[0],:] = X_trials[t][:,0:pad1]
+				data[t,:,:] = X_trials[t][:,0:pad1]
 			pieces.append(data)
 		else:
 			print("First event is not aligned for all trials")
-	##do the timestretching for each event epoch individually
-	for e in range(1,n_events):
+	##do the timestretching for each epoch individually
+	for e in np.arange(1,n_events-2):
 		##get just the interval for this particular epoch
-		epoch_ts = ts[:,e-1:e+1]
-		##now get the median duration of this epoch for all trials as an integer (if not specified) 
-		if median_dur is None:
-			median_dur = int(np.ceil(np.median(epoch_ts[:,1]-epoch_ts[:,0])))
+		epoch_ts = ts[:,e:e+2]
+		##now interpolate this to be a uniform size
 		data_new = interp_trials(X_trials,epoch_ts,median_dur)
 		pieces.append(data_new)
 	##finally, see if the ephys data has any padding after the final event
-	##collect the differences between the last timestamp of each trial and the trial length
+	##collect the differences between the last trial outcome and the trial end
 	t_diff = np.zeros(n_trials)
 	for i in range(n_trials):
-		t_diff[i] = X_trials[i].shape[1]-ts[i,-1]
-	if not np.all(t_diff<=1):
+		t_diff[i] = ts[i,-1]-ts[i,-2]
+	if not np.all(t_diff==0):
 		##make sure padding is equal for all trials
 		if np.all(t_diff==t_diff[0]):
-			pad2 = t_diff[0]
+			pad2 = t_diff[0].astype(int)
 			data = np.zeros((n_trials,n_neurons,pad2))
 			for t in range(n_trials):
 				data[t,0:X_trials[t].shape[0],:] = X_trials[t][:,-pad2:]
@@ -245,7 +174,7 @@ def stretch_trials(X_trials,ts,median_dur=None):
 			pad2 = np.floor(t_diff[0]).astype(int)
 			data = np.zeros((n_trials,n_neurons,pad2))
 			for t in range(n_trials):
-				data[t,0:X_trials[t].shape[0],:] = X_trials[t][:,-pad2:]
+				data[t,:,:] = X_trials[t][:,-pad2:]
 			pieces.append(data)
 	##finally, concatenate everything together!
 	X = np.concatenate(pieces,axis=2)
@@ -253,9 +182,10 @@ def stretch_trials(X_trials,ts,median_dur=None):
 
 """
 A helper function that does interpolation on one trial.
+
 Inputs:
 	data: list of trial data to work with; each trial should be neurons x bins
-	epoch_ts: timestamps for each trial of the epoch to interpolate over
+	epoch_ts: timestamps for each trial of the epoch to interpolate over, in bins
 	new_dur: the requested size of the trial after interpolation
 Returns:
 	data_new: a numpy array with the data stretched to fit
@@ -357,4 +287,77 @@ def zscore_across_trials(X_trials):
 			c+=trial_lens[i]
 	return X_result
 
+"""
+dPCA requires balanced conditions, meaning that there needs to be even numbers of each trial
+type. In my task, animals didn't necessarily do the same number of trials across all combinations
+of conditions. So, to accout for that, we will only take n trials of each type, where n is the
+lowest number of trials for any given condition. This function takes in a trial data dataframe, 
+a list of the two conditions to consider, and returns balanced indices of trials across all conditions.
+Inputs:
+	trial_data: pandas dataframe with trial data, like that returned by ptr.get_full_trials
+	conditions: should be two of the following: 'context', action', or 'outcome'. Can't be all three because
+			there is no such thing as a rewarded trial with upper lever contex and lower lever action.
+Returns:
+	trial_index: dictionary with trial indices for all conditions
+	n_trials: number of trials 
+"""
+def balance_trials(trial_data,conditions):
+	##begin by getting the data for both of the conditions
+	cond_1 = trial_data[conditions[0]]
+	cond_2 = trial_data[conditions[1]]
+	##figure out how many different trial types we have
+	n_types = np.unique(cond_1).size * np.unique(cond_2).size
+	##make a dictionary to store the indices of each trial type
+	trial_index = {}
+	for c1 in np.unique(cond_1):
+		for c2 in np.unique(cond_2):
+			trial_index[c1+"+"+c2] = []
+	for i in range(len(trial_data.index)):
+		trial_type = trial_data[conditions[0]][i]+"+"+trial_data[conditions[1]][i]
+		##now just add the index to the dictionary
+		trial_index[trial_type].append(i)
+	##now, what is the minimum number of trials across all trial types?
+	min_trials = min([len(x) for x in trial_index.values()])
+	##from here, just randomly sample trials from conditions that have more than the min
+	##number of trials so everything is balanced
+	for k in trial_index.keys():
+		if len(trial_index[k]) > min_trials:
+			sub_idx = np.random.randint(0,len(trial_index[k]),min_trials)
+			trial_index[k] = np.asarray(trial_index[k])[sub_idx]
+	return trial_index,min_trials
 
+"""
+This function is a counterpart to balance_trials. It also picks out the indices of the various trial
+types, but doesn't remove any trials from any condition, meaning that the index lists can be different 
+lengths.
+Inputs:
+	trial_data: pandas dataframe with trial data, like that returned by ptr.get_full_trials
+	conditions: should be two of the following: 'context', action', or 'outcome'. Can't be all three because
+			there is no such thing as a rewarded trial with upper lever contex and lower lever action.
+Returns:
+	trial_index: dictionary with trial indices for all conditions
+	max_trials: maximum number of trials for any trial type
+"""
+def unbalance_trials(trial_data,conditions):
+	##begin by getting the data for both of the conditions
+	cond_1 = trial_data[conditions[0]]
+	cond_2 = trial_data[conditions[1]]
+	##figure out how many different trial types we have
+	n_types = np.unique(cond_1).size * np.unique(cond_2).size
+	##make a dictionary to store the indices of each trial type
+	trial_index = {}
+	for c1 in np.unique(cond_1):
+		for c2 in np.unique(cond_2):
+			trial_index[c1+"+"+c2] = []
+	for i in range(len(trial_data.index)):
+		trial_type = trial_data[conditions[0]][i]+"+"+trial_data[conditions[1]][i]
+		##now just add the index to the dictionary
+		trial_index[trial_type].append(i)
+	##now, what is the minimum number of trials across all trial types?
+	max_trials = max([len(x) for x in trial_index.values()])
+	for k in trial_index.keys():
+		if len(trial_index[k]) < max_trials:
+			trial_index[k] = np.random.choice(trial_index[k],max_trials)
+	return trial_index,max_trials
+
+###TODO: handle ValueError that occurs when trial_index[k] is empty
