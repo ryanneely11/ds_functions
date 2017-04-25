@@ -58,19 +58,22 @@ def get_dataset(f_behavior,f_ephys,conditions,smooth_method='both',smooth_width=
 		trial_index,n_trials = unbalance_trials(trial_data,conditions)
 	trial_types = list(trial_index)
 	##allocate space for the dataset
-	X_c = np.empty((n_trials,n_units,len(condition_pairs[conditions[0]]),
-		len(condition_pairs[conditions[1]]),n_bins))
-	X_c[:] = np.nan
-	for t in trial_index.keys():
-		##based on the key, figure out where these trials should be placed in the dataset
-		##I **think** that we should always expect the context[0] trial type to be the first part of the string
-		c1_type = t[:t.index('+')]
-		c2_type = t[t.index('+')+1:]
-		c1_idx = condition_pairs[conditions[0]].index(c1_type)
-		c2_idx = condition_pairs[conditions[1]].index(c2_type)
-		##now add the data to the dataset using these indices
-		for i,j in enumerate(trial_index[t]):
-			X_c[i,:,c1_idx,c2_idx,:] = X[j,:,:]
+	if n_trials > 0:
+		X_c = np.empty((n_trials,n_units,len(condition_pairs[conditions[0]]),
+			len(condition_pairs[conditions[1]]),n_bins))
+		X_c[:] = np.nan
+		for t in trial_index.keys():
+			##based on the key, figure out where these trials should be placed in the dataset
+			##I **think** that we should always expect the context[0] trial type to be the first part of the string
+			c1_type = t[:t.index('+')]
+			c2_type = t[t.index('+')+1:]
+			c1_idx = condition_pairs[conditions[0]].index(c1_type)
+			c2_idx = condition_pairs[conditions[1]].index(c2_type)
+			##now add the data to the dataset using these indices
+			for i,j in enumerate(trial_index[t]):
+				X_c[i,:,c1_idx,c2_idx,:] = X[j,:,:]
+	else:
+		X_c = None
 	return X_c
 
 
@@ -102,7 +105,7 @@ def run_dpca(X_trials,n_components,conditions):
 	var_explained = dpca.explained_variance_ratio_
 	##finally, get the significance masks (places where the demixed components are significant)
 	sig_masks = dpca.significance_analysis(np.nanmean(X_trials,axis=0),X_trials,axis='t',
-		n_shuffles=100,n_splits=10,n_consecutive=2)
+		n_shuffles=100,n_splits=3,n_consecutive=2)
 	return Z,var_explained,sig_masks	
 
 """
@@ -353,11 +356,21 @@ def unbalance_trials(trial_data,conditions):
 		trial_type = trial_data[conditions[0]][i]+"+"+trial_data[conditions[1]][i]
 		##now just add the index to the dictionary
 		trial_index[trial_type].append(i)
+	##run a check to see if any of the trial types have 0 occurances
+	##we will discard this session if this is the case
+	discard = False
+	for key, value in zip(trial_index.keys(),trial_index.values()):
+		if len(value) == 0:
+			discard = True
+			print("This session is missing trials of type {0}; discarding...".format(key))
 	##now, what is the minimum number of trials across all trial types?
-	max_trials = max([len(x) for x in trial_index.values()])
-	for k in trial_index.keys():
-		if len(trial_index[k]) < max_trials:
-			trial_index[k] = np.random.choice(trial_index[k],max_trials)
+	if not discard:
+		max_trials = max([len(x) for x in trial_index.values()])
+		for k in trial_index.keys():
+			if len(trial_index[k]) < max_trials:
+				trial_index[k] = np.random.choice(trial_index[k],max_trials)
+	else:
+		max_trials = 0
 	return trial_index,max_trials
 
 ###TODO: handle ValueError that occurs when trial_index[k] is empty

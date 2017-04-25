@@ -6,6 +6,7 @@ import session_analysis as sa
 import parse_ephys as pe
 import parse_timestamps as pt
 import parse_trials as ptr
+import plotting as ptt
 import file_lists
 import os
 import h5py
@@ -212,9 +213,11 @@ def get_dpca_dataset(conditions,smooth_method='both',smooth_width=[80,40],pad=[4
 		current_file = f_behavior[-11:-5]
 		print("Adding data from file "+current_file)
 		##append the dataset from this session
-		X_all.append(dpca.get_dataset(f_behavior,f_ephys,conditions,smooth_method=smooth_method,
+		dataset = dpca.get_dataset(f_behavior,f_ephys,conditions,smooth_method=smooth_method,
 			smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=med_duration,
-			max_duration=max_duration,min_rate=min_rate,balance=balance))
+			max_duration=max_duration,min_rate=min_rate,balance=balance)
+		if dataset is not None:
+			X_all.append(dataset)
 	##now, get an idea of how many trials we have per dataset
 	n_trials = [] ##keep track of how many trials are in each session
 	include = [] ##keep track of which sessions have more then the min number of trials
@@ -231,7 +234,33 @@ def get_dpca_dataset(conditions,smooth_method='both',smooth_width=[80,40],pad=[4
 	for s in include:
 		X_c.append(X_all[s][0:min_trials,:,:,:,:])
 	return np.concatenate(X_c,axis=1)
-
+"""
+Same as "get dpca dataset" but just goes the final step of running dpca, saving the results,
+and plotting the data.
+"""
+def save_dpca(conditions,smooth_method='both',smooth_width=[80,40],pad=[400,400],
+	z_score=True,max_duration=5000,min_rate=0.1,balance=True,min_trials=15,plot=True):
+	save_file = "/Volumes/Untitled/Ryan/DS_animals/results/dPCA/{}+{}.hdf5".format(conditions[0],conditions[1])
+	X_c = get_dpca_dataset(conditions,smooth_method=smooth_method,smooth_width=smooth_width,
+		pad=pad,z_score=z_score,max_duration=max_duration,min_rate=min_rate,balance=balance,min_trials=min_trials)
+	##fit the data
+	Z,var_explained,sig_masks = dpca.run_dpca(X_c,10,conditions)
+	##now save:
+	f = h5py.File(save_file,'w')
+	f.create_dataset("X_c",data=X_c)
+	f.create_group("Z")
+	for key,value in zip(Z.keys(),Z.values()):
+		f['Z'].create_dataset(key,data=value)
+	f.create_group("var_explained")
+	for key,value in zip(var_explained.keys(),var_explained.values()):
+		f['var_explained'].create_dataset(key,data=value)
+	f.create_group("sig_masks")
+	for key,value in zip(sig_masks.keys(),sig_masks.values()):
+		f['sig_masks'].create_dataset(key,data=value)
+	f.close()
+	if plot:
+		ptt.plot_dpca_results(Z,var_explained,sig_masks,conditions,smooth_width[1],
+			pad=pad,n_components=3)
 
 
 
@@ -261,7 +290,7 @@ def analyze_log_regressions(dir_list,session_range=None,sig_level=0.05,test_type
 			flist = flist[session_range[0]:session_range[1]]
 		for f in flist:
 			##parse the results for this file
-			results = sa.parse_log_regression2(f,sig_level=sig_level,test_type=test_type)
+			results = sa.parse_log_regression(f,sig_level=sig_level,test_type=test_type)
 			##get an array of EVERY significant unit across all epochs
 			sig_idx = []
 			for epoch in epochs:
