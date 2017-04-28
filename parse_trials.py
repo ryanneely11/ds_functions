@@ -178,8 +178,6 @@ def get_trial_spikes(f_behavior,f_ephys,smooth_method='both',smooth_width=[80,40
 	if smooth_method != 'none':
 		for t in range(len(X_trials)):
 			X_trials[t] = pe.smooth_spikes(X_trials[t],smooth_method,smooth_width)
-	if z_score:
-		X_trials = dpca.zscore_across_trials(X_trials)
 	##now we can work on equating all the trial lengths
 	##if no specific trial length is requested, just use the median trial dur
 	if trial_duration is None:
@@ -202,7 +200,10 @@ def get_trial_spikes(f_behavior,f_ephys,smooth_method='both',smooth_width=[80,40
 	else: 
 		ts_rel = get_ts_rel(trial_data)
 	##now we can stretch/squeeze all of the trials to be the same length
-	return dpca.stretch_trials(X_trials,ts_rel,trial_duration), trial_data
+	X_trials = dpca.stretch_trials(X_trials,ts_rel,trial_duration)
+	if z_score:
+		X_trials = dpca.zscore_across_trials(X_trials)
+	return X_trials,trial_data
 
 
 	
@@ -717,9 +718,42 @@ def get_ts_rel(data,bin_width=None):
 	return ts_rel.astype(int)
 
 
-
-
-
+"""
+A function to parse a trial_data pandas array in order to split trials
+into different trial types.
+Inputs:
+	trial_data: a pandas array of the type returned by get_full_trials
+Returns: 
+	trial_info: a dictionary, basically a further parsing of the data into 
+		different classes, indicating which trials are in which class
+"""
+def parse_trial_data(trial_data):
+	##set up our output dictionary
+	trial_info = {
+	'upper_correct_rewarded':[],
+	'upper_correct_unrewarded':[],
+	'upper_incorrect':[],
+	'lower_correct_rewarded':[],
+	'lower_correct_unrewarded':[],
+	'lower_incorrect':[]
+	}
+	for t in range(len(trial_data.index)):
+		trial = trial_data.loc[t]
+		if trial['action'] == 'upper_lever' and trial['context'] == 'upper_rewarded' and trial['outcome'] == 'rewarded_poke':
+			trial_info['upper_correct_rewarded'].append(t)
+		elif trial['action'] == 'upper_lever' and trial['context'] == 'upper_rewarded' and trial['outcome'] == 'unrewarded_poke':
+			trial_info['upper_correct_unrewarded'].append(t)
+		elif trial['action'] == 'upper_lever' and trial['context'] == 'lower_rewarded':
+			trial_info['upper_incorrect'].append(t)
+		elif trial['action'] == 'lower_lever' and trial['context'] == 'lower_rewarded' and trial['outcome'] == 'rewarded_poke':
+			trial_info['lower_correct_rewarded'].append(t)
+		elif trial['action'] == 'lower_lever' and trial['context'] == 'lower_rewarded' and trial['outcome'] == 'unrewarded_poke':
+			trial_info['lower_correct_unrewarded'].append(t)
+		elif trial['action'] == 'lower_lever' and trial['context'] == 'upper_rewarded':
+			trial_info['lower_incorrect'].append(t)
+		else:
+			print("Unknown trial type for trial {}".format(t))
+	return trial_info
 
 
 

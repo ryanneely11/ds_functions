@@ -14,6 +14,7 @@ import PCA
 import glob
 import dpca
 import pandas as pd
+import multiprocessing as mp
 
 
 
@@ -234,6 +235,79 @@ def get_dpca_dataset(conditions,smooth_method='both',smooth_width=[80,40],pad=[4
 	for s in include:
 		X_c.append(X_all[s][0:min_trials,:,:,:,:])
 	return np.concatenate(X_c,axis=1)
+
+"""
+A function to get a dataset that includes data from all animals and sessions, for all trials AND switch trials.
+specifically formatted to use in a dPCA analysis, but only including trials right after a context swith.
+Inputs:
+	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	pad: a window for pre- and post-trial padding, in ms. In other words, an x-ms period of time 
+		before lever press to consider the start of the trial, and an x-ms period of time after
+		reward to consider the end of the trial
+	z_score: if True, z-scores the array
+	balance_trials: if True, equates the number of trials across all conditions by removal
+	min_trials: minimum number of trials required for each trial type. If a session doesn't meet 
+		this criteria, it will be excluded.
+	n_after: numbe of trials after a switch to take data from
+Returns:
+	X_c: data from individual trials;
+		 shape n-trials x n-neurons x condition-1 x condition-2, ... x n-timebins
+"""
+def get_switch_data(conditions,smooth_method='both',smooth_width=[80,40],pad=[400,400],
+	z_score=True,max_duration=5000,min_rate=0.1,balance=True,min_trials_c=15,min_trials_s=5,
+	n_after=10):
+	##a container to store all of the X_trials data
+	X_all_c = []
+	X_all_s = []
+	##the first step is to determine the median trial length for all sessions
+	med_duration = np.median(get_trial_durations(max_duration=max_duration,session_range=None)).astype(int)
+	##generate input arguments for multiprocessing
+	arglist = [[f_behavior,f_ephys,conditions,smooth_method,smooth_width,pad,z_score,med_duration,
+				max_duration,min_rate,balance,n_after] for f_behavior,f_ephys in zip(file_lists.e_behavior,
+					file_lists.ephys_files)]
+	##assign data collection to multiple processes
+	pool = mp.Pool(processes=8)
+	async_result = pool.map_async(dpca.get_switch_and_data_mp,arglist)
+	pool.close()
+	pool.join()
+	results = async_result.get()
+	for i in range(len(results)):
+		if results[i][1] != None:
+			X_all_c.append(results[i][0])
+			X_all_s.append(results[i][1])
+	##now, get an idea of how many trials we have per dataset
+	n_trials_c = [] ##keep track of how many trials are in each session
+	include_c = [] ##keep track of which sessions have more then the min number of trials
+	for i in range(len(X_all_c)):
+		n = X_all_c[i].shape[0]
+		if n >= min_trials_c:
+			include_c.append(i)
+			n_trials_c.append(n)
+	##from this set, what is the minimum number of trials?
+	print("Including {0!s} sessions out of {1!s}".format(len(include_c),len(X_all_c)))
+	min_trials_c = min(n_trials_c)
+	##now all we have to do is concatenate everything together!
+	X_c = []
+	for s in include_c:
+		X_c.append(X_all_c[s][0:min_trials_c,:,:,:,:])
+	##now, get an idea of how many trials we have per dataset
+	n_trials_s = [] ##keep track of how many trials are in each session
+	include_s = [] ##keep track of which sessions have more then the min number of trials
+	for i in range(len(X_all_s)):
+		n = X_all_s[i].shape[0]
+		if n >= min_trials_s:
+			include_s.append(i)
+			n_trials_s.append(n)
+	##from this set, what is the minimum number of trials?
+	print("Including {0!s} sessions out of {1!s}".format(len(include_s),len(X_all_s)))
+	min_trials_s = min(n_trials_s)
+	##now all we have to do is concatenate everything together!
+	X_s = []
+	for s in include_s:
+		X_s.append(X_all_s[s][0:min_trials_s,:,:,:,:])	
+	return np.concatenate(X_c,axis=1), np.concatenate(X_s,axis=1)
 """
 Same as "get dpca dataset" but just goes the final step of running dpca, saving the results,
 and plotting the data.
@@ -349,7 +423,30 @@ def get_metadata(max_duration=5000):
 		metadata['units_recorded']+=sa.get_n_units(f_ephys)
 	return metadata
 
-
+"""
+A function to get a "template" trial_data dataset
+that can be used to standardize all sessions for tensor analysis
+"""
+def get_template_session():
+	##save a lot of metadata about how trials are organized
+	upper_rewarded_first = 0 #how many sessions have the upper lever first?
+	lower_rewarded_first = 0
+	trials_per_block = [] ##how many trials are in each block?
+	correct_per_block = [] ##how many correct trials in each block?
+	incorrect_per_block = [] ##how many incorrect trials in each block?
+	correct_unrewarded_per_block = [] ##how many correct unrewarded trials per block?
+	for f_behavior in file_lists.e_behavior:
+		##get the trial_data for this session
+		trial_data = ptr.get_full_trials(f_behavior)
+		##which block is first?
+		if trial_data.loc[0]['context'] == 'upper_rewarded':
+			upper_rewarded_first += 1
+		else: 
+			lower_rewarded_first += 1
+		##what is the length of each block?
+		##how many correct trials are in each block?
+		##how many incorrect trials are in each block?
+		##correct unrewarded trials?
 
 ##returns a list of file paths for all hdf5 files in a directory
 def get_file_names(directory):

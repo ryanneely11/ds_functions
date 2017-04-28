@@ -74,9 +74,103 @@ def get_dataset(f_behavior,f_ephys,conditions,smooth_method='both',smooth_width=
 				X_c[i,:,c1_idx,c2_idx,:] = X[j,:,:]
 	else:
 		X_c = None
-	return X_c
+	return np.nan_to_num(X_c)
 
+"""
+A function to return the data from trials after a context switch, as well as data
+	from all other trials. Makes sure that data is paired so you can fit/transform on one
+	model. Optimized for multiprocessing.
+Inputs:
+	f_behavior: file path to behavior data
+	f_ephys: file path to ephys data
+	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	pad: a window for pre- and post-trial padding, in ms. In other words, an x-ms period of time 
+		before lever press to consider the start of the trial, and an x-ms period of time after
+		reward to consider the end of the trial. For best results, should be a multiple of the bin size
+	z_score: if True, z-scores the array
+	trial_duration: specifies the trial length (in ms) to squeeze trials into. If None, the function uses
+		the median trial length over the trials in the file
+	min_rate: the min spike rate, in Hz, to accept. Units below this value will be removed.
+	max_duration: maximum allowable trial duration (ms)
+	n_after: the number of trials after a context switch to include in a dataset
 
+Returns:
+	X_c: data from individual trials: n-trials x n-neurons x condition-1, condition-2, ... x n-timebins.
+"""
+def get_switch_and_data_mp(args):
+	##parse args
+	f_behavior = args[0]
+	f_ephys = args[1]
+	conditions = args[2]
+	smooth_method = args[3]
+	smooth_width = args[4]
+	pad = args[5]
+	z_score = args[6]
+	trial_duration = args[7]
+	max_duration = args[8]
+	min_rate = args[9]
+	balance = args[10]
+	n_after = args[11]
+	##get the spike dataset, and the trial info
+	X,trial_data = ptr.get_trial_spikes(f_behavior=f_behavior,f_ephys=f_ephys,smooth_method=smooth_method,
+		smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=trial_duration,
+		max_duration=max_duration,min_rate=min_rate)
+	##find the indices where there is a context switch
+	switch_trials = get_switch_index(trial_data,n_after)
+	X1 = X[switch_trials,:,:]
+	trial_data1 = trial_data.loc[switch_trials]
+	trial_data1.index = np.arange(len(trial_data1.index))
+	#some metadata	
+	n_units = X1.shape[1]
+	n_bins = X1.shape[2]
+	if balance:
+		trial_index,n_trials = balance_trials(trial_data1,conditions)
+	else:
+		trial_index,n_trials = unbalance_trials(trial_data1,conditions)
+	trial_types = list(trial_index)
+	##allocate space for the dataset
+	if n_trials > 0:
+		X_s = np.empty((n_trials,n_units,len(condition_pairs[conditions[0]]),
+			len(condition_pairs[conditions[1]]),n_bins))
+		X_s[:] = np.nan
+		for t in trial_index.keys():
+			##based on the key, figure out where these trials should be placed in the dataset
+			##I **think** that we should always expect the context[0] trial type to be the first part of the string
+			c1_type = t[:t.index('+')]
+			c2_type = t[t.index('+')+1:]
+			c1_idx = condition_pairs[conditions[0]].index(c1_type)
+			c2_idx = condition_pairs[conditions[1]].index(c2_type)
+			##now add the data to the dataset using these indices
+			for i,j in enumerate(trial_index[t]):
+				X_s[i,:,c1_idx,c2_idx,:] = X1[j,:,:]
+		##now repeat for all trials
+		##get some metadata about this session
+		n_units = X.shape[1]
+		n_bins = X.shape[2]
+		if balance:
+			trial_index,n_trials = balance_trials(trial_data,conditions)
+		else:
+			trial_index,n_trials = unbalance_trials(trial_data,conditions)
+		trial_types = list(trial_index)
+		##allocate space for the dataset
+		X_c = np.empty((n_trials,n_units,len(condition_pairs[conditions[0]]),
+			len(condition_pairs[conditions[1]]),n_bins))
+		X_c[:] = np.nan
+		for t in trial_index.keys():
+			##based on the key, figure out where these trials should be placed in the dataset
+			##I **think** that we should always expect the context[0] trial type to be the first part of the string
+			c1_type = t[:t.index('+')]
+			c2_type = t[t.index('+')+1:]
+			c1_idx = condition_pairs[conditions[0]].index(c1_type)
+			c2_idx = condition_pairs[conditions[1]].index(c2_type)
+			##now add the data to the dataset using these indices
+			for i,j in enumerate(trial_index[t]):
+				X_c[i,:,c1_idx,c2_idx,:] = X[j,:,:]
+	else:
+		X_s = None; X_c = None
+	return np.nan_to_num(X_c), np.nan_to_num(X_s)
 
 """
 This function actually runs dpca, relying on some globals for 
@@ -100,13 +194,14 @@ def run_dpca(X_trials,n_components,conditions):
 	dpca = dPCA.dPCA(labels=labels,join=join,n_components=n_components,
 		regularizer='auto')
 	dpca.protect = ['t']
-	Z = dpca.fit_transform(np.nanmean(X_trials,axis=0),X_trials)
+	Z = dpca.fit_transform(np.nanmean(X_trials,axis=0),trialX=X_trials)
 	##Next, get the variance explained:
 	var_explained = dpca.explained_variance_ratio_
 	##finally, get the significance masks (places where the demixed components are significant)
 	sig_masks = dpca.significance_analysis(np.nanmean(X_trials,axis=0),X_trials,axis='t',
 		n_shuffles=100,n_splits=3,n_consecutive=2)
 	return Z,var_explained,sig_masks	
+
 
 """
 A function to equate the lengths of trials by using a piecewise
@@ -373,4 +468,27 @@ def unbalance_trials(trial_data,conditions):
 		max_trials = 0
 	return trial_index,max_trials
 
-###TODO: handle ValueError that occurs when trial_index[k] is empty
+"""
+A function to get the indices of trials that occur after a context switch.
+Inputs:
+	trial_data: pandas data array of trial timestmaps and labels
+	n_after: number of trials after a switch to include
+Returns: 
+	switch_trials: indices of trials that occur after a conext switch.
+"""
+def get_switch_index(trial_data,n_after):
+	##find the indices where there is a context switch
+	new_block_starts = []
+	max_trials = max(trial_data.index)
+	for i in range(len(trial_data.index)-1):
+		current_context = trial_data['context'][i]
+		next_context = trial_data['context'][i+1]
+		if not current_context == next_context:
+			new_block_starts.append(i)
+	switch_trials = []
+	for t in range(len(new_block_starts)):
+		for n in range(n_after):
+			if new_block_starts[t]+n <= max_trials:
+				switch_trials.append(new_block_starts[t]+n)
+	return switch_trials
+

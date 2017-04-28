@@ -43,6 +43,21 @@ def get_spike_data(f_in,smooth_method='bins',smooth_width=50,z_score=False):
 			X[a,:] = zscore(X[a,:])
 	return X
 
+def get_lfp_data(f_in,smooth_method='bins',smooth_width=50,z_score=False):
+	f = h5py.File(f_in,'r')
+	#get the list of lfp channels in the file
+	ad_chans = [x for x in f.keys() if x.startswith('AD') and not x.endswith('_ts')]
+	##make sure all the AD channels have the same duration
+	durs = np.asarray([f[x].size for x in ad_chans])
+	assert np.all(durs==durs[0])
+	L = np.zeros((len(ad_chans),durs[0]))
+	##add the data to the list of arrays 
+	for n,u in enumerate(ad_chans):
+		##do the binary transform (ie 1 ms bins)
+		L[n,:] = np.asarray(f[u])
+	f.close()
+	return L
+
 """
 A function to parse a data raw data array (X) into windows of time.
 Inputs: 

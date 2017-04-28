@@ -20,6 +20,8 @@ from scipy import stats
 from matplotlib import cm
 import matplotlib
 import collections
+import tensortools as tt
+from tensor_analysis import align_factors, _validate_factors
 
 """
 A function to plot examplar units from logistic regression, from one session at a time.
@@ -802,9 +804,9 @@ def plot_eigen(C,X,w,v):
 	fig, (ax1,ax2) = plt.subplots(2,sharex=True)
 	ax1.plot(evals,'-o')
 	ax1.plot(np.arange(evals.shape[0]),np.ones(evals.shape[0])*lmax,
-	        '--',color='k',label='lmax')
+			'--',color='k',label='lmax')
 	ax1.plot(np.arange(evals.shape[0]),np.ones(evals.shape[0])*tw_max,
-	       '--',color='r',label='tw_max')
+		   '--',color='r',label='tw_max')
 	ax1.set_xlabel("eigenvector #",fontsize=14)
 	ax1.set_ylabel('eigenvalue',fontsize=14)
 	ax1.legend()
@@ -1180,7 +1182,7 @@ def plot_dpca_results(Z,var_explained,sig_masks,conditions,bin_size,pad=None,n_c
 	##add time and interaction as a conditions
 	conditions = ['time']+conditions+['interaction']
 	n_conditions = len(conditions)
-	c_idx = list(Z) ##the letters used to index the conditions in Z
+	c_idx = ['t',conditions[1][0]+'t',conditions[2][0]+'t',conditions[1][0]+conditions[2][0]+'t'] ##the letters used to index the conditions in Z
 	##get scaled time axis
 	time = np.linspace(0,bin_size*Z['t'].shape[-1],Z['t'].shape[-1])
 	##we'll plot the first n dPC's for each condition
@@ -1250,6 +1252,157 @@ def plot_dpca_results(Z,var_explained,sig_masks,conditions,bin_size,pad=None,n_c
 	ax.set_ylim(0,100)
 	plt.show()
 
+	
+	"""Plots a KTensor.
+
+	Each parameter can be passed as a list if different formatting is
+	desired for each set of factors. For example, if `X` is a 3rd-order
+	tensor (i.e. `X.ndim == 3`) then `X.plot(color=['r','k','b'])` plots
+	all factors for the first mode in red, the second in black, and the
+	third in blue. On the other hand, `X.plot(color='r')` produces red
+	plots for each mode.
+
+	Parameters
+	----------
+	plots : str or list
+		One of {'bar','line'} to specify the type of plot for each factor.
+		The default is 'line'.
+	color : matplotlib color or list
+		Color for plots associated with each set of factors
+	lw : int or list
+		Specifies line width on plots. Default is 2
+	ylim : str, y-axis limits or list
+		Specifies how to set the y-axis limits for each mode of the
+		decomposition. For a third-order, rank-2 model, setting
+		ylim=['link', (0,1), ((0,1), (-1,1))] specifies that the
+		first pair of factors have the same y-axis limits (chosen
+		automatically), the second pair of factors both have y-limits
+		(0,1), and the third pair of factors have y-limits (0,1) and
+		(-1,1).
+	"""
+def plot_tensors(factors,trial_data,n_factors=4,plots=['bar','line','scatter'],ylim='link',
+				 yticks=True,width_ratios=None,scatter_kw=dict(),line_kw=dict(),bar_kw=dict(),
+				 titles=['Estimated\nneuron factors', 'Estimated\ntime factors', 'Estimated\ntrial factors']):
+	
+	trial_info = ptr.parse_trial_data(trial_data)
+	factors, ndim, rank = _validate_factors(factors)
+	rank = n_factors
+	figsize = (8, rank)
+
+	# helper function for parsing plot options
+	def _broadcast_arg(arg, argtype, name):
+		"""Broadcasts plotting option `arg` to all factors
+		"""
+		if arg is None or isinstance(arg, argtype):
+			return [arg for _ in range(ndim)]
+		elif isinstance(arg, list):
+			return arg
+		else:
+			raise ValueError('Parameter %s must be a %s or a list'
+							 'of %s' % (name, argtype, argtype))
+
+	# parse optional inputs
+	plots = _broadcast_arg(plots, str, 'plots')
+	ylim = _broadcast_arg(ylim, (tuple, str), 'ylim')
+	bar_kw = _broadcast_arg(bar_kw, dict, 'bar_kw')
+	line_kw = _broadcast_arg(line_kw, dict, 'line_kw')
+	scatter_kw = _broadcast_arg(scatter_kw, dict, 'scatter_kw')
+
+	# parse plot widths, defaults to equal widths
+	if width_ratios is None:
+		width_ratios = [1 for _ in range(ndim)]
+
+	# default scatterplot options
+	for sckw in scatter_kw:
+		if not "edgecolor" in sckw.keys():
+			sckw["edgecolor"] = "none"
+		if not "s" in sckw.keys():
+			sckw["s"] = 10
+
+	#setup figure
+	fig, axes = plt.subplots(rank, ndim,
+						   figsize=figsize,
+						   gridspec_kw=dict(width_ratios=width_ratios))
+	if rank == 1: axes = axes[None, :]
+
+	# main loop, plot each factor
+	plot_obj = np.empty((rank, ndim), dtype=object)
+	for r in range(rank):
+		for i, f in enumerate(factors):
+
+			# determine type of plot
+			if plots[i] == 'bar':
+				plot_obj[r,i] = axes[r,i].bar(np.arange(1, f.shape[0]+1), f[:,r], **bar_kw[i])
+				axes[r,i].set_xlim(0, f.shape[0]+1)
+			elif plots[i] == 'scatter':
+				plot_obj[r,i] = axes[r,i]
+				for trial_type in trial_info.keys():
+					x = trial_info[trial_type]
+					y = f[x,r]
+					marker,color,facecolor = get_line_props(trial_type)
+					plot_obj[r,i].scatter(x,y,color=color,marker=marker,facecolor=facecolor,label=trial_type)
+				axes[r,i].set_xlim(0, f.shape[0])
+			elif plots[i] == 'line':
+				plot_obj[r,i] = axes[r,i].plot(f[:,r], '-', **line_kw[i])
+				axes[r,i].set_xlim(0, f.shape[0])
+			else:
+				raise ValueError('invalid plot type')
+
+			# format axes
+			axes[r,i].locator_params(nbins=4)
+			axes[r,i].spines['top'].set_visible(False)
+			axes[r,i].spines['right'].set_visible(False)
+			axes[r,i].xaxis.set_tick_params(direction='out')
+			axes[r,i].yaxis.set_tick_params(direction='out')
+			axes[r,i].yaxis.set_ticks_position('left')
+			axes[r,i].xaxis.set_ticks_position('bottom')
+			##set the title 
+			if r == 0:
+				axes[r,i].set_title(titles[i])
+
+			# remove xticks on all but bottom row
+			if r != rank-1:
+				plt.setp(axes[r,i].get_xticklabels(), visible=False)
+	axes[0,2].legend(bbox_to_anchor=(1,1))
+	# link y-axes within columns
+	for i, yl in enumerate(ylim):
+		if yl is None:
+			continue
+		elif yl == 'link':
+			yl = [a.get_ylim() for a in axes[:,i]]
+			y0, y1 = min([y[0] for y in yl]), max([y[1] for y in yl])
+			[a.set_ylim((y0, y1)) for a in axes[:,i]]
+		elif yl == 'tight':
+			[a.set_ylim(np.min(factors[i][:,r])*0.75, np.max(factors[i][:,r])*1.1)  for r, a in enumerate(axes[:,i])]
+		elif isinstance(yl[0], (int, float)) and len(yl) == 2:
+			[a.set_ylim(yl) for a in axes[:,i]]
+		elif isinstance(yl[0], (tuple, list)) and len(yl) == rank:
+			[a.set_ylim(lims) for a, lims in zip(axes[:,i], yl)]
+		else:
+			raise ValueError('ylimits not properly specified')
+
+	# format y-ticks
+	for r in range(rank):
+		for i in range(ndim):
+			if not yticks:
+				axes[r,i].set_yticks([])
+			else:
+				# only two labels
+				ymin, ymax = np.round(axes[r,i].get_ylim(), 2)
+				axes[r,i].set_ylim((ymin, ymax))
+
+				# remove decimals from labels
+				if ymin.is_integer():
+					ymin = int(ymin)
+				if ymax.is_integer():
+					ymax = int(ymax)
+
+				# update plot
+				axes[r,i].set_yticks([ymin, ymax])
+				axes[r,i].set_yticklabels([str(ymin), str(ymax)])
+
+	plt.tight_layout()
+
 """
 A helper function to calculate the mean and 95% CI of some data
 Imputs:
@@ -1257,12 +1410,12 @@ Imputs:
 	confidence: value for CI
 """
 def mean_confidence_interval(a, confidence=0.95):
-    n = a.shape[0]
-    m, se = np.mean(a,axis=0), scipy.stats.sem(a,axis=0)
-    h = np.zeros(m.shape)
-    for i in range(m.shape[0]):
-    	h[i] = se[i] * sp.stats.t._ppf((1+confidence)/2., n-1)
-    return m, m-h, m+h
+	n = a.shape[0]
+	m, se = np.mean(a,axis=0), scipy.stats.sem(a,axis=0)
+	h = np.zeros(m.shape)
+	for i in range(m.shape[0]):
+		h[i] = se[i] * sp.stats.t._ppf((1+confidence)/2., n-1)
+	return m, m-h, m+h
 
 """
 A helper function to calculate the mean and S.E.M. for a set of data
@@ -1288,9 +1441,43 @@ def rc_idx(idx,side_len):
 	col = idx%side_len
 	return int(row),int(col)
 
+"""
+A function to convert a saved dPCA file to a dictionary for plotting etc
+"""
+def convert_dpca_file(f_in):
+	f = h5py.File(f_in,'r')
+	Z = {}
+	for key in list(f['Z']):
+		Z[key] = np.asarray(f['Z'][key])
+	var_explained = {}
+	for key in list(f['var_explained']):
+		var_explained[key] = np.asarray(f['var_explained'][key])
+		sig_masks = {}
+	for key in list(f['sig_masks']):
+		sig_masks[key] = np.asarray(f['sig_masks'][key])
+	f.close()
+	return Z, var_explained, sig_masks
+
 color_lut = {
 	'action':['red','blue'],
 	'context':['maroon','cyan'],
 	'outcome':['gold','green']
 }
 
+##helper function for tensor plots
+def get_line_props(trial_type):
+	if trial_type == 'upper_correct_rewarded':
+		marker='o'; facecolor='r'; color='r'
+	elif trial_type == 'upper_correct_unrewarded':
+		marker='o'; facecolor='none'; color='r'
+	elif trial_type == 'upper_incorrect':
+		marker = '+'; facecolor = 'r'; color = 'r'
+	elif trial_type == 'lower_correct_rewarded':
+		marker='o'; facecolor='b'; color='b'
+	elif trial_type == 'lower_correct_unrewarded':
+		marker='o'; facecolor='none'; color='b'
+	elif trial_type == 'lower_incorrect':
+		marker='+'; facecolor='b'; color='b'
+	else:
+		print("Unknown trial type: {}".format(trial_type))
+	return marker,color,facecolor
