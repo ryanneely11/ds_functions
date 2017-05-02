@@ -77,6 +77,29 @@ def get_dataset(f_behavior,f_ephys,conditions,smooth_method='both',smooth_width=
 	return np.nan_to_num(X_c)
 
 """
+A multiprocessing implementation of get_dataset()
+"""
+def get_dataset_mp(args):
+	##parse args
+	f_behavior = args[0]
+	f_ephys = args[1]
+	conditions = args[2]
+	smooth_method = args[3]
+	smooth_width = args[4]
+	pad = args[5]
+	z_score = args[6]
+	trial_duration = args[7]
+	max_duration = args[8]
+	min_rate = args[9]
+	balance = args[10]
+	current_file = f_behavior[-11:-5]
+	print("Adding data from file "+current_file)
+	X_c = get_dataset(f_behavior,f_ephys,conditions,smooth_method=smooth_method,smooth_width=smooth_width,
+		pad=pad,z_score=z_score,trial_duration=trial_duration,max_duration=max_duration,min_rate=min_rate,
+		balance=balance)
+	return X_c,f_behavior
+
+"""
 A function to return the data from trials after a context switch, as well as data
 	from all other trials. Makes sure that data is paired so you can fit/transform on one
 	model. Optimized for multiprocessing.
@@ -200,6 +223,17 @@ def run_dpca(X_trials,n_components,conditions):
 	##finally, get the significance masks (places where the demixed components are significant)
 	sig_masks = dpca.significance_analysis(np.nanmean(X_trials,axis=0),X_trials,axis='t',
 		n_shuffles=100,n_splits=3,n_consecutive=2)
+	return Z,var_explained,sig_masks
+
+"""
+Multiprocess implementation of run_dpca
+"""
+def run_dpca_mp(args):
+	##parse args
+	X_trials = args[0]
+	n_components = args[1]
+	conditions = args[2]
+	Z,var_explained,sig_masks = run_dpca(X_trials,n_components,conditions)
 	return Z,var_explained,sig_masks	
 
 

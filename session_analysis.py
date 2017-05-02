@@ -320,6 +320,22 @@ def session_dpca(f_behavior,f_ephys,smooth_method='both',smooth_width=[40,50],
 	events = np.array([0,max(time)-pad[1]])
 	return Z,time,var_explained,sig_masks,events
 
+"""
+This function is designed to "standardize" a given trial. The rationale is that
+many sessions have a similar structure, and if we standardize all sessions, we can
+concatenate them and then run analyses on data from all sessions and animals,
+concatenated into one big matrix.
+Inputs:
+	f_behavior: data file with behavioral data
+	f_ephys: data file with ephys data
+	session_template: a "standard session" matching the ptr.get_full_trials dataset format
+		(but without timestamps)
+Returns:
+	X: data matrix with ephys data for individual trials that match the session template
+"""
+def standardize_session(f_behavior,f_ephys,session_template):
+	pass
+
 
 
 """
@@ -356,6 +372,13 @@ def get_session_meta(f_behavior,max_duration=5000):
 	'upper_context':np.where(data['context']=='upper_rewarded')[0],
 	'lower_context':np.where(data['context']=='lower_rewarded')[0],
 	}
+	trial_info = ptr.parse_trial_data(data)
+	metadata['n_blocks'] = trial_info['n_blocks']
+	metadata['mean_block_len'] = np.mean(trial_info['block_lengths'])
+	metadata['reward_rate'] = np.mean([len(trial_info['upper_correct_rewarded'])/(
+		len(trial_info['upper_correct_rewarded'])+len(trial_info['upper_correct_unrewarded'])),
+		len(trial_info['lower_correct_rewarded'])/(len(trial_info['lower_correct_rewarded'])+len(
+			trial_info['lower_correct_unrewarded']))])
 	return metadata
 
 """

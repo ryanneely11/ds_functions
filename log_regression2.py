@@ -6,7 +6,7 @@
 #fits, etc.
 
 import numpy as np
-from sklearn import linear_model
+from sklearn import linear_model,svm,neural_network,tree
 from sklearn.model_selection import train_test_split
 import multiprocessing as mp
 
@@ -26,8 +26,12 @@ def log_fit(X,y,n_iter=5):
 	if len(X.shape) == 1:
 		X = X.reshape(-1,1)
 	##init the model class
-	lr = linear_model.LogisticRegressionCV(penalty='l2',fit_intercept=True,
-		solver='liblinear',max_iter=100,n_jobs=1)
+	lr = linear_model.LogisticRegression(penalty='l2',fit_intercept=True,
+		solver='liblinear',max_iter=100,n_jobs=1,class_weight='balanced')
+		#tree.DecisionTreeClassifier(class_weight='balanced')
+		#neural_network.MLPClassifier(solver='lbfgs')
+		#svm.LinearSVC(class_weight='balanced')
+
 	accuracy = np.zeros(n_iter)
 	for i in range(n_iter):
 		##split the data into train and test sets
@@ -117,6 +121,34 @@ def permutation_test_multi(X,y,n_iter_cv=5,n_iter_p=500):
 		p_vals[i] = results[i][2]
 		chance_rates[i] = results[i][1]
 	return accuracies,chance_rates,p_vals
+
+"""
+A function that just returns a logistic regression model fitted with
+input data
+	X: the independent data; could be spike rates over period.
+		in shape samples x features (ie, trials x spike rates)
+	y: the class data; should be binary. In shape (trials,)
+returns: 
+	model: the fitted logit model
+"""
+def get_model(X,y):
+	lr = linear_model.LogisticRegression(penalty='l2',fit_intercept=True,
+	solver='liblinear',max_iter=100,n_jobs=1,class_weight='balanced')
+	return lr.fit(X,y)
+
+"""
+A function to predict the action taken on one trial given some basic parameters
+and a previously fit model.
+Inputs: 
+	model: a logistic regression model already fit with data, used to predict
+		the new model.
+	x_trial: np array with data from the trial to predict. must have the
+		same parameters as those used to fit the model.
+Returns:
+	value of the predicted action
+"""
+def predict_trial(model,x_trial):
+	return model.predict(x_trial.reshape(1,-1))
 
 """
 A helper function to make a non-binary array

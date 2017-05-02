@@ -9,6 +9,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_curve, auc
 import pandas as pd
 import multiprocessing as mp
+import parse_trials as ptr
 
 """
 A function to fit a cross-validated logistic regressions, and return the 
@@ -47,7 +48,7 @@ def log_fit(X,y,n_iter=5):
 		accuracy[i] = (y_pred==y_test).sum()/float(y_test.size)
 	##now get the p-value info for this model
 	logit = sm.Logit(y,X)
-	results = logit.fit(method='cg',disp=False,skip_hession=True,warn_convergence=False)
+	results = logit.fit(method='newton',disp=False,skip_hession=True,warn_convergence=False)
 	llr_p = results.llr_pvalue
 	return accuracy.mean(),llr_p
 
@@ -84,6 +85,7 @@ def permutation_test(args):
 			times_exceeded += 1
 		chance_rates.append(a_shuff)
 	return a_actual, np.asarray(chance_rates).mean(), float(times_exceeded)/n_iter_p, llr_p
+	
 
 """
 a function to run permutation testing on multiple
@@ -162,6 +164,68 @@ def find_optimal_cutoff(target, probs):
 	roc_t = roc.ix[(roc.tf-0).abs().argsort()[:1]]
 	return list(roc_t['threshold'])[0]
 
+"""
+A function to get regression coefficients for a pandas array of
+trial data from one session. This model takes into account:
+-action history
+-reward history
+-action-reward interaction history
+-the training day
+-the trial number in the session
+Inputs:
+	f_behavior: the behavior data file
+	n_back: the number of previous trials to include in the history
+	max_duration: the maximum allowable trial duration (ms)
+Returns:
+	y: outcome array (1 for upper, 0 for lower lever)
+	X: predictor array
+"""
+def get_behavior_data(f_behavior,n_back=3,max_duration=5000):
+	global trial_lut
+	##start by parsing the trials
+	trial_data = ptr.get_full_trials(f_behavior,max_duration=max_duration)
+	##get the session number for this session
+	session_num = ptr.get_session_number(f_behavior)
+	##pre-allocation
+	n_trials = len(trial_data.index)
+	##how many features we have depends on the length of our
+	##action/reward history
+	features = ['training_day','trial_number']
+	for i in range(n_back):
+		features.append('action-'+str(i+1))
+		features.append('outcome-'+str(i+1))
+		features.append('interaction-'+str(i+1))
+	##create the data arrays
+	y = pd.DataFrame(index=np.arange(n_trials),columns=['value','action'])
+	X = pd.DataFrame(index=np.arange(n_trials),columns=features)
+	"""
+	Now parse each trial using the following values:
+	reward/no reward: 1 or 0
+	upper lever/lower lever: 2 or 1
+	"""
+	for t in range(n_trials):
+		##get the trial data for this trial
+		trial = trial_data.loc[t]
+		##fill out the outcomes array first
+		y['value'][t] = trial_lut[trial['action']]
+		y['action'][t] = trial['action']
+		X['training_day'][t] = session_num
+		X['trial_number'][t] = t
+		for i in range(n_back):
+			if t > n_back:
+				X['action-'+str(i+1)][t] = trial_lut[trial_data['action'][t-(i+1)]]
+				X['outcome-'+str(i+1)][t] = trial_lut[trial_data['outcome'][t-(i+1)]]
+				X['interaction-'+str(i+1)][t] = trial_lut[trial_data['action'][t-(
+					i+1)]]*trial_lut[trial_data['outcome'][t-(i+1)]]
+			else:
+				X['action-'+str(i+1)][t] = 0
+				X['outcome-'+str(i+1)][t] = 0
+				X['interaction-'+str(i+1)][t] = 0
+	return y,X
 
-
-
+trial_lut = {
+'upper_lever':2,
+'lower_lever':1,
+'rewarded_poke':1,
+'unrewarded_poke':0
+}

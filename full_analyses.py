@@ -15,8 +15,30 @@ import glob
 import dpca
 import pandas as pd
 import multiprocessing as mp
+import log_regression3 as lr3
 
 
+
+"""
+A function to get parameterized behavior data arrays for all
+sessions, in order to build a logistic regression model. 
+"""
+def behavior_regression(n_back=3,max_duration=5000):
+	##create a container for all the dataframes
+	X_all = []
+	y_all = []
+	for f_behavior in file_lists.e_behavior:
+		y,X = lr3.get_behavior_data(f_behavior,n_back=n_back,max_duration=max_duration)
+		X_all.append(X)
+		y_all.append(y)
+	##now concatenate all of them
+	X_all = pd.concat(X_all,ignore_index=True)
+	y_all = pd.concat(y_all,ignore_index=True)
+	##the pandas dataset format may come in handy in the future, but
+	##for now I'll just convert it to numpy arrays for easy interfacing with the lr2/3 functions
+	##it also appears that the session number and trial numbers aren't 
+	##really important so I'll leave those out
+	return np.asarray(y_all['value']).astype(float),np.asarray(X_all).astype(float)[:,2:]
 
 
 """
@@ -210,15 +232,18 @@ def get_dpca_dataset(conditions,smooth_method='both',smooth_width=[80,40],pad=[4
 	X_all = []
 	##the first step is to determine the median trial length for all sessions
 	med_duration = np.median(get_trial_durations(max_duration=max_duration,session_range=None)).astype(int)
-	for f_behavior,f_ephys in zip(file_lists.e_behavior,file_lists.ephys_files):
-		current_file = f_behavior[-11:-5]
-		print("Adding data from file "+current_file)
-		##append the dataset from this session
-		dataset = dpca.get_dataset(f_behavior,f_ephys,conditions,smooth_method=smooth_method,
-			smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=med_duration,
-			max_duration=max_duration,min_rate=min_rate,balance=balance)
-		if dataset is not None:
-			X_all.append(dataset)
+	arglist = [[f_behavior,f_ephys,conditions,smooth_method,smooth_width,pad,z_score,med_duration,
+				max_duration,min_rate,balance] for f_behavior,f_ephys in zip(file_lists.e_behavior,
+					file_lists.ephys_files)]
+	##assign data collection to multiple processes
+	pool = mp.Pool(processes=8)
+	async_result = pool.map_async(dpca.get_dataset_mp,arglist)
+	pool.close()
+	pool.join()
+	results = async_result.get()
+	for i in range(len(results)):
+		if results[i] != None:
+			X_all.append(results[i])
 	##now, get an idea of how many trials we have per dataset
 	n_trials = [] ##keep track of how many trials are in each session
 	include = [] ##keep track of which sessions have more then the min number of trials
@@ -235,6 +260,84 @@ def get_dpca_dataset(conditions,smooth_method='both',smooth_width=[80,40],pad=[4
 	for s in include:
 		X_c.append(X_all[s][0:min_trials,:,:,:,:])
 	return np.concatenate(X_c,axis=1)
+
+"""
+A very similar function to get_dpca_dataset, but just returns data from all the sessions
+in a list, without balancing the number of trials across sessions.
+Useful for running dpca on each dataset individually.
+Inputs:
+	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	pad: a window for pre- and post-trial padding, in ms. In other words, an x-ms period of time 
+		before lever press to consider the start of the trial, and an x-ms period of time after
+		reward to consider the end of the trial
+	z_score: if True, z-scores the array
+	balance_trials: if True, equates the number of trials across all conditions by removal
+		but only for each session independently
+Returns:
+	X_c: data from individual sessions; a list with each dataset in the format
+		 shape n-trials x n-neurons x condition-1 x condition-2, ... x n-timebins
+"""
+def get_dpca_datasets_all(conditions,smooth_method='both',smooth_width=[80,40],pad=[400,400],
+	z_score=True,max_duration=5000,min_rate=0.1,balance=True):
+	##a container to store all of the X_trials data
+	X_all = []
+	session_names = []
+	##the first step is to determine the median trial length for all sessions
+	med_duration = np.median(get_trial_durations(max_duration=max_duration,session_range=None)).astype(int)
+	arglist = [[f_behavior,f_ephys,conditions,smooth_method,smooth_width,pad,z_score,med_duration,
+				max_duration,min_rate,balance] for f_behavior,f_ephys in zip(file_lists.e_behavior,
+					file_lists.ephys_files)]
+	##assign data collection to multiple processes
+	pool = mp.Pool(processes=8)
+	async_result = pool.map_async(dpca.get_dataset_mp,arglist)
+	pool.close()
+	pool.join()
+	results = async_result.get()
+	for i in range(len(results)):
+		if results[i][0].size > 1:
+			X_all.append(results[i][0])
+			session_names.append(results[i][1])
+	return X_all, session_names
+
+"""
+A function to return dpca-transformed datasets from all sessions
+Inputs:
+	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	pad: a window for pre- and post-trial padding, in ms. In other words, an x-ms period of time 
+		before lever press to consider the start of the trial, and an x-ms period of time after
+		reward to consider the end of the trial
+	z_score: if True, z-scores the array
+	balance_trials: if True, equates the number of trials across all conditions by removal
+		but only for each session independently
+	n_components: number of components to fit
+Returns:
+	X_d: list of dpca-transformed datasets (each dataset is a dictionary with marginalizations)
+"""
+def run_dpca_all(conditions,smooth_method='both',smooth_width=[80,40],pad=[400,400],
+	z_score=True,max_duration=5000,min_rate=0.1,balance=True,n_components=12):
+	##first get the datasets
+	X_all = get_dpca_datasets_all(conditions,smooth_method=smooth_method,smooth_width=smooth_width,
+		pad=pad,z_score=z_score,max_duration=max_duration,min_rate=min_rate,balance=balance)
+	##generate the argument list for the processor pool
+	arglist = [[x,n_components,conditions] for x in X_all]
+	pool = mp.Pool(processes=8)
+	async_result = pool.map_async(dpca.run_dpca_mp,arglist)
+	pool.close()
+	pool.join()
+	results = async_result.get()
+	Z_all = []
+	var_all = []
+	sig_all = []
+	for i in range(len(results)):
+		Z_all.append(results[i][0])
+		var_all.append(results[i][1])
+		sig_all.append(results[i][2])
+	return Z_all,var_all,sig_all
+
 
 """
 A function to get a dataset that includes data from all animals and sessions, for all trials AND switch trials.
@@ -407,9 +510,12 @@ def get_metadata(max_duration=5000):
 	'lower_context_trials':0,
 	'upper_lever_trials':0,
 	'lower_lever_trials':0,
-	'units_recorded':0
+	'units_recorded':0,
+	'mean_block_length':0,
+	'mean_blocks_per_session':0,
+	'mean_reward_rate':0
 	}
-	for f_behavior in file_lists.behavior_files:
+	for f_behavior in file_lists.e_behavior:
 		meta = sa.get_session_meta(f_behavior,max_duration)
 		metadata['training_sessions']+=1
 		metadata['rewarded_trials']+=meta['rewarded'].size
@@ -418,6 +524,12 @@ def get_metadata(max_duration=5000):
 		metadata['lower_context_trials']+=meta['lower_context'].size
 		metadata['lower_lever_trials']+=meta['lower_lever'].size
 		metadata['upper_lever_trials']+=meta['upper_lever'].size
+		metadata['mean_block_length']+=meta['mean_block_len']
+		metadata['mean_blocks_per_session']+=meta['n_blocks']
+		metadata['mean_reward_rate']+=meta['reward_rate']
+	metadata['mean_block_length'] = metadata['mean_block_length']/len(file_lists.e_behavior)
+	metadata['mean_blocks_per_session'] = metadata['mean_blocks_per_session']/len(file_lists.e_behavior)
+	metadata['mean_reward_rate'] = metadata['mean_reward_rate']/len(file_lists.e_behavior)
 	for f_ephys in file_lists.ephys_files:
 		metadata['sessions_with_ephys']+=1
 		metadata['units_recorded']+=sa.get_n_units(f_ephys)
@@ -427,26 +539,55 @@ def get_metadata(max_duration=5000):
 A function to get a "template" trial_data dataset
 that can be used to standardize all sessions for tensor analysis
 """
-def get_template_session():
-	##save a lot of metadata about how trials are organized
-	upper_rewarded_first = 0 #how many sessions have the upper lever first?
-	lower_rewarded_first = 0
-	trials_per_block = [] ##how many trials are in each block?
-	correct_per_block = [] ##how many correct trials in each block?
-	incorrect_per_block = [] ##how many incorrect trials in each block?
-	correct_unrewarded_per_block = [] ##how many correct unrewarded trials per block?
-	for f_behavior in file_lists.e_behavior:
-		##get the trial_data for this session
-		trial_data = ptr.get_full_trials(f_behavior)
-		##which block is first?
-		if trial_data.loc[0]['context'] == 'upper_rewarded':
-			upper_rewarded_first += 1
-		else: 
-			lower_rewarded_first += 1
-		##what is the length of each block?
-		##how many correct trials are in each block?
-		##how many incorrect trials are in each block?
-		##correct unrewarded trials?
+def build_template_session(max_duration=5000,n_back=3,epoch='early'):
+	contexts = ['lower_rewarded','upper_rewarded']
+	##get some meta about how the sessions are structured, on average
+	metadata = get_metadata(max_duration=max_duration)
+	##build a model that can predict behavior
+	y,X = behavior_regression(max_duration=max_duration,n_back=n_back)
+	model = lr2.get_model(X,y)
+	##create the template dataframe
+	n_blocks = np.round(metadata['mean_blocks_per_session']).astype(int)
+	trials_per_block = np.round(metadata['mean_block_length']).astype(int)
+	reward_rate = metadata['mean_reward_rate']
+	columns = ['context','action','outcome']
+	trial_data = pd.DataFrame(index=np.arange(n_blocks*trials_per_block))
+	##go trial-by-trial and create the data
+	##create a pandas dataframe because it's easier for me to keep track
+	features = ['training_day','trial_number']
+	for i in range(n_back):
+		features.append('action-'+str(i+1))
+		features.append('outcome-'+str(i+1))
+		features.append('interaction-'+str(i+1))
+	for n,ctx in enumerate(contexts):
+		for t in range(trials_per_block):
+			##generate the trial info for this trial to use in the model
+			x = pd.DataFrame(index=[0],columns=features)
+			trial_num = (n*trials_per_block)+t
+			x['trial_number'][0] = trial_num
+			if epoch=='early':
+				session_num = np.random.randint(15,20)
+			if epoch == 'late':
+				session_num = np.random.randint(40,48)
+			x['training_day'][0] = session_num
+			for i in range(n_back):	
+				if trial_num > n_back:
+					x['action-'+str(i+1)][0] = lr3.trial_lut[trial_data['action'][trial_num-(i+1)]]
+					x['outcome-'+str(i+1)][0] = lr3.trial_lut[trial_data['outcome'][trial_num-(i+1)]]
+					x['interaction-'+str(i+1)][0] = lr3.trial_lut[trial_data['action'][trial_num-(
+						i+1)]]*lr3.trial_lut[trial_data['outcome'][trial_num-(i+1)]]
+				else:
+					x['action-'+str(i+1)][0] = 0
+					x['outcome-'+str(i+1)][0] = 0
+					x['interaction-'+str(i+1)][0] = 0
+			##now we can predict the action for this trial
+			trial_data['action'] = lr3.trial_lut ##do a reverse dictionary lookup here to get the action label
+			##next, determine what the outcome of this trial will be, given the current context and the
+			##determined reward rate
+
+
+
+
 
 ##returns a list of file paths for all hdf5 files in a directory
 def get_file_names(directory):

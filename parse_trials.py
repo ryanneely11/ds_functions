@@ -8,6 +8,7 @@ import dpca
 import parse_ephys as pe
 import h5py
 import pandas as pd
+import file_lists
 
 
 """
@@ -735,7 +736,9 @@ def parse_trial_data(trial_data):
 	'upper_incorrect':[],
 	'lower_correct_rewarded':[],
 	'lower_correct_unrewarded':[],
-	'lower_incorrect':[]
+	'lower_incorrect':[],
+	'n_blocks':1,
+	'block_lengths':[]
 	}
 	for t in range(len(trial_data.index)):
 		trial = trial_data.loc[t]
@@ -753,7 +756,36 @@ def parse_trial_data(trial_data):
 			trial_info['lower_incorrect'].append(t)
 		else:
 			print("Unknown trial type for trial {}".format(t))
+	##now get the block lengths data
+	current_block = trial_data.loc[0]['context']
+	block_length = 0
+	for t in range(len(trial_data.index)):
+		if current_block == trial_data.loc[t]['context']: ##case where the block does not change
+			block_length+=1
+		else: ##case where block DOES change
+			# print("block length is {}".format(block_length))
+			trial_info['block_lengths'].append(block_length)
+			trial_info['n_blocks'] +=1
+			block_length = 0
+			current_block = trial_data.loc[t]['context']
+	##add the length of th last block
+	trial_info['block_lengths'].append(block_length)
 	return trial_info
 
 
+""" 
+A helper function to return the actual session number
+(files are named in reference to before or after implant)
+Input:
+	fname: string file name for a behavior file
+Returns:
+	session_number
+"""
+def get_session_number(fname):
+	##first figure out what animal this session is from
+	animal = fname[-11:-9]
+	##get all the behavior files from this animal
+	ani_files = [x for x in file_lists.behavior_files if x[-11:-9] == animal]
+	##now get the position of this file in the full list
+	return ani_files.index(fname)
 
