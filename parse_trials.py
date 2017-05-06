@@ -672,7 +672,8 @@ def check_trial_len(data,max_length=5000):
 			print("Error: negative trial length detected (removed)")
 			to_remove.append(i)
 	if len(to_remove)>0:
-		print("Dropping "+str(len(to_remove))+" trials over "+str(max_length/1000)+" sec")
+		pass
+		#print("Dropping "+str(len(to_remove))+" trials over "+str(max_length/1000)+" sec")
 	data = data.drop(to_remove) 
 	##now replace the index to exclude the dropped trials
 	data.index = np.arange(len(data.index))

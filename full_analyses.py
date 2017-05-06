@@ -16,6 +16,7 @@ import dpca
 import pandas as pd
 import multiprocessing as mp
 import log_regression3 as lr3
+import log_regression2 as lr2
 
 
 
@@ -38,7 +39,7 @@ def behavior_regression(n_back=3,max_duration=5000):
 	##for now I'll just convert it to numpy arrays for easy interfacing with the lr2/3 functions
 	##it also appears that the session number and trial numbers aren't 
 	##really important so I'll leave those out
-	return np.asarray(y_all['value']).astype(float),np.asarray(X_all).astype(float)[:,2:]
+	return np.asarray(y_all['value']).astype(float),np.asarray(X_all).astype(float)
 
 
 """
@@ -551,7 +552,7 @@ def build_template_session(max_duration=5000,n_back=3,epoch='early'):
 	trials_per_block = np.round(metadata['mean_block_length']).astype(int)
 	reward_rate = metadata['mean_reward_rate']
 	columns = ['context','action','outcome']
-	trial_data = pd.DataFrame(index=np.arange(n_blocks*trials_per_block))
+	trial_data = pd.DataFrame(index=np.arange(n_blocks*trials_per_block),columns=columns)
 	##go trial-by-trial and create the data
 	##create a pandas dataframe because it's easier for me to keep track
 	features = ['training_day','trial_number']
@@ -580,12 +581,38 @@ def build_template_session(max_duration=5000,n_back=3,epoch='early'):
 					x['action-'+str(i+1)][0] = 0
 					x['outcome-'+str(i+1)][0] = 0
 					x['interaction-'+str(i+1)][0] = 0
+			##we already know the context for this trial
+			trial_data['context'][trial_num] = ctx
 			##now we can predict the action for this trial
-			trial_data['action'] = lr3.trial_lut ##do a reverse dictionary lookup here to get the action label
+			action = model.predict(x)
+			if action[0] == 2:
+				trial_data['action'][trial_num] = 'upper_lever' #***CAREFUL IF THIS KEY/VALUE PAIR CHANGES
+			elif action[0] == 1:
+				trial_data['action'][trial_num] = 'lower_lever'
+			else:
+				print("Warning: unknown action value: {}".format(action[0]))
+				break
 			##next, determine what the outcome of this trial will be, given the current context and the
 			##determined reward rate
-
-
+			if trial_data['action'][trial_num] == 'upper_lever' and ctx == 'lower_rewarded':
+				outcome = 'unrewarded_poke'
+			elif trial_data['action'][trial_num] == 'lower_lever' and ctx == 'upper_rewarded':
+				outcome = 'unrewarded_poke'
+			elif trial_data['action'][trial_num] == 'upper_lever' and ctx == 'upper_rewarded':
+				if np.random.random() < reward_rate:
+					outcome = 'rewarded_poke'
+				else:
+					outcome = 'unrewarded_poke'
+			elif trial_data['action'][trial_num] == 'lower_lever' and ctx == 'lower_rewarded':
+				if np.random.random() < reward_rate:
+					outcome = 'rewarded_poke'
+				else:
+					outcome = 'unrewarded_poke'
+			else:
+				print("Unkown action type: {}".format(trial_data['action'][trial_num]))
+				break
+			trial_data['outcome'][trial_num] = outcome
+	return trial_data
 
 
 

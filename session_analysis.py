@@ -374,6 +374,8 @@ def get_session_meta(f_behavior,max_duration=5000):
 	}
 	trial_info = ptr.parse_trial_data(data)
 	metadata['n_blocks'] = trial_info['n_blocks']
+	metadata['block_lengths'] = trial_info['block_lengths']
+	metadata['first_block'] = data['context'][0]
 	metadata['mean_block_len'] = np.mean(trial_info['block_lengths'])
 	metadata['reward_rate'] = np.mean([len(trial_info['upper_correct_rewarded'])/(
 		len(trial_info['upper_correct_rewarded'])+len(trial_info['upper_correct_unrewarded'])),
