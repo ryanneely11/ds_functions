@@ -26,7 +26,9 @@ class RL_agent(object):
 		'Qb':[0.5], ##action value of action b
 		'reward':[0], ##reward history
 		'action':[actions[0]], ##action history
-		'p_switch':[0.5] ##switch probability for comparing to state-based model
+		'p_switch':[0.5], ##switch probability for comparing to state-based model
+		'p_a':[0.5], ##probability of action a
+		'p_b':[0.5] ##probability of action b
 		}
 
 	##run one trial
@@ -50,7 +52,7 @@ class RL_agent(object):
 			raise ValueError
 			print("Unknown action type: {}".format(action_last))
 		##now we can predict what action we will take
-		action,p_switch = self.choose_action(Qa_prior,Qb_prior,self.beta,self.alpha)
+		Pa,action,p_switch = self.choose_action(Qa_prior,Qb_prior,self.beta,self.alpha)
 		##now feed this action into the bandit to get a reward
 		reward = self.bandit.run(action)
 		##finally, we can log all of the events from this action
@@ -59,6 +61,8 @@ class RL_agent(object):
 		self.log['reward'].append(reward)
 		self.log['action'].append(action)
 		self.log['p_switch'].append(p_switch)
+		self.log['p_a'].append(Pa)
+		self.log['p_b'].append(1-Pa)
 
 
 	"""
@@ -99,7 +103,9 @@ class RL_agent(object):
 		beta: inverse temperature parameter
 		alpha: indecision point
 	Returns:
+		Pa, probability of action a
 		action: chosen action
+		p_switch: probability of switching actions
 	"""
 	def choose_action(self,Qa,Qb,beta,alpha):
 		##probability of choosing action a
@@ -107,7 +113,7 @@ class RL_agent(object):
 		p_switch = self.get_p_switch(Pa)
 		##probability of choosing either action
 		probs = [Pa,1-Pa]
-		return np.random.choice(self.actions,p=probs),p_switch
+		return Pa,np.random.choice(self.actions,p=probs),p_switch
 
 	"""
 	A helper function to imlement the 

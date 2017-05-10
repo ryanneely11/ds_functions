@@ -34,7 +34,9 @@ class HMM_agent(object):
 		'PX_correct':[0.5], ##Probability distribution over states
 		'outcome':[0],##reward history
 		'action':[actions[0]], ##action history
-		'p_switch':[0.5] ##probability of switching
+		'p_switch':[0.5], ##probability of switching
+		'p_a':[0.5], ##probability of action a
+		'p_b':[0.5] ##probability of action b
 		}
 
 	##run one trial and update based on the Markov Property
@@ -44,6 +46,8 @@ class HMM_agent(object):
 		action = self.choose_action(P_switch)
 		choice = self.was_switch(action) ##did we switch or stay?
 		prior_Xt = self.compute_prior(choice)
+		##compute the probabilities of taking each action
+		p_a,p_b = self.get_action_probs(P_switch)
 		##now take the action
 		outcome = self.bandit.run(action)
 		##now compute the posterior
@@ -53,6 +57,8 @@ class HMM_agent(object):
 		self.log['outcome'].append(outcome)
 		self.log['action'].append(action)
 		self.log['p_switch'].append(P_switch)
+		self.log['p_a'].append(p_a)
+		self.log['p_b'].append(p_b)
 	
 
 	"""`
@@ -86,6 +92,24 @@ class HMM_agent(object):
 		elif choice == 'stay':
 			action = self.log['action'][-1]
 		return action
+
+	"""
+	A function to compute the probabilities of action a and b
+	Inputs:
+		p_switch: the probability of switching on the current trial
+	Returns:
+		p_a: probability of choosing action a
+		p_b: probability of choosing action b
+	"""
+	def get_action_probs(self,P_switch):
+		last_action = self.log['action'][-1]
+		if last_action == self.actions[0]:
+			p_b = P_switch
+			p_a = 1-P_switch
+		elif last_action == self.actions[1]:
+			p_a = P_switch
+			p_b = 1-P_switch
+		return p_a,p_b
 
 	"""
 	A function to determine if the current choice represents
