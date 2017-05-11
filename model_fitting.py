@@ -60,6 +60,20 @@ def fit_HMM_model(session_range):
 	return results
 
 
+	
+"""
+A function to do brute-force optimization.
+"""
+def brute_optimize(func,ranges,gridspace=100):
+	n_params = len(ranges)
+	##create the gridpoints by equal spacing in the given ranges
+	gridpoints = []
+	for i in range(n_params):
+		r = ranges[0]
+		gridpoints.append(np.linspace(r[0],r[1],gridspace))
+	
+
+
 """
 a function to return the negative log-liklihood of
 an RL model given a list of params, X, and a behavior
@@ -355,4 +369,4 @@ def parse_model_results(model,bandit):
 		}
 	return trial_data,event_data
 
-	
+
