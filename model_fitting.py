@@ -7,7 +7,58 @@ from HMM_model import HMM_agent
 from task import bandit
 import session_analysis as sa
 import parse_trials as ptr
-import multiprocessing as mp
+from scipy.optimize import minimize,brute,fmin_slsqp
+import file_lists
+import os
+import pandas as pd
+
+"""
+A function to perform optimization on RL_models.
+Inputs:
+	-session_range: a range of session numbers to use for model fitting
+Returns:
+	-resutls: dictionary of results from scipy.optimize.minimize
+"""
+def fit_RL_model(session_range):
+	##define some reasonable bounds for parameter values
+	alpha_bounds = (0,10)
+	beta_bounds = (0,50)
+	eta_bounds = (0,1)
+	bounds = [alpha_bounds,beta_bounds,eta_bounds]
+	##get behavior data to fit the model to
+	actions,p_rewarded,switch_after,b_a,b_b = get_fit_info(session_range)
+	##initial guess
+	x0 = [0.2,0.8,0.1]
+	##set up the minimizer
+	results = brute(score_RL_model,bounds,args=(actions,p_rewarded,
+		switch_after,b_a,b_b),Ns=20,disp=True)
+	return results
+
+"""
+A function to perform optimization on HMM models.
+Inputs:
+	-session_range: a range of session numbers to use for model fitting
+Returns:
+	-resutls: dictionary of results from scipy.optimize.minimize
+"""
+def fit_HMM_model(session_range):
+	##define some reasonable bounds for parameter values
+	alpha_bounds = (0,10)
+	beta_bounds = (0,100)
+	delta_bounds = (0,1)
+	correct_mean_bounds = (0,1)
+	incorrect_mean_bounds = (0,1)
+	bounds = bounds=[alpha_bounds,beta_bounds,delta_bounds,
+	correct_mean_bounds,incorrect_mean_bounds]
+	##get behavior data to fit the model to
+	actions,p_rewarded,switch_after,b_a,b_b = get_fit_info(session_range)
+	##initial guess
+	x0 = [0.5,20,0.1,0.5,0.5]
+	##set up the minimizer
+	results = brute(score_HMM_model,bounds,args=(actions,p_rewarded,
+		switch_after,b_a,b_b),Ns=20,disp=True)
+	return results
+
 
 """
 a function to return the negative log-liklihood of
@@ -15,52 +66,32 @@ an RL model given a list of params, X, and a behavior
 session file to compare to.
 Inputs:
 	x: the parameter list: [alpha,beta,eta]
+	actions: list of possible actions
+	p_rewarded = probability of a reward given a correct response
+	switch_after: block switches
+	b_a,b_b: actual behavior responses for action a and b (bool)
 Returns:
-	negative log-liklihood of model
+	mean negative log-liklihood of model score
 """
-def score_RL_model(x,f_behavior):
-	actions,p_rewarded,switch_after = get_bandit_info(f_behavior)
-	b_a,b_b = get_action_sequence(actions,f_behavior)
+def score_RL_model(x,actions,p_rewarded,switch_after,b_a,b_b):
 	n_trials = 20
-	arglist =[x,actions,p_rewarded,switch_after,b_a,b_b]
 	results = []
-	for i in range(n_trials):
-		results.append(mp_RL_fit(arglist))
-	# arglist = [
-	# [x,f_behavior,actions,p_rewarded,switch_after,b_a,b_b] for i in range(n_trials)]
-	# pool = mp.Pool(processes=n_trials)
-	# async_result = pool.map_async(mp_RL_fit,arglist)
-	# pool.close()
-	# pool.join()
-	# results = async_result.get()
-	return np.mean(results)
-
-"""
-A function to do multiprocessed model fitting
-"""
-def mp_RL_fit(args):
-	##parse the input tuple
-	x = args[0]
-	actions=args[1]
-	p_rewarded = args[2]
-	switch_after=args[3]
-	b_a = args[4]
-	b_b = args[5]
 	alpha = x[0]
 	beta = x[1]
 	eta = x[2]
-	##init the task using the given session
-	task = bandit(actions,p_rewarded,switch_after)
-	##now, we can produce the outputs of the model given our params:
-	model = RL_agent(task,actions,alpha,beta,eta)
-	for i in range(len(b_a)-1):
-		model.run()
-	p_a = model.log['p_a']
-	p_b = model.log['p_b']
-	##now let's compute the log-liklihood:
-	logL = log_liklihood(b_a,b_b,p_a,p_b)
-	##return the negative for our optimizer
-	return -logL
+	for i in range(n_trials):
+		##init the task using the given session
+		task = bandit(actions,p_rewarded,switch_after)
+		##now, we can produce the outputs of the model given our params:
+		model = RL_agent(task,actions,alpha,beta,eta)
+		for i in range(len(b_a)-1):
+			model.run()
+		p_a = model.log['p_a']
+		p_b = model.log['p_b']
+		##now let's compute the log-liklihood:
+		logL = log_liklihood(b_a,b_b,p_a,p_b)
+		results.append(-logL)
+	return np.nanmean(results)
 
 """
 a function to return the negative log-liklihood of
@@ -68,55 +99,34 @@ an HHM model given a list of params, X, and a behavior
 session file to compare to.
 Inputs:
 	x: the parameter list: [alpha,beta,delta,correct_mean,incorrect_mean]
+	actions: list of possible actions
+	p_rewarded = probability of a reward given a correct response
+	switch_after: block switches
+	b_a,b_b: actual behavior responses for action a and b (bool)
 Returns:
-	negative log-liklihood of model
+	mean negative log-liklihood of model scores
 """
-def score_HMM_model(x,f_behavior):
-	actions,p_rewarded,switch_after = get_bandit_info(f_behavior)
-	b_a,b_b = get_action_sequence(actions,f_behavior)
+def score_HMM_model(x,actions,p_rewarded,switch_after,b_a,b_b):
 	n_trials = 20
-	arglist = [x,actions,p_rewarded,switch_after,b_a,b_b]
 	results = []
-	for i in range(n_trials):
-		results.append(mp_HMM_fit(arglist))
-	# arglist = [
-	# [x,actions,p_rewarded,switch_after,b_a,b_b] for i in range(n_trials)]
-	# pool = mp.Pool(processes=n_trials)
-	# async_result = pool.map_async(mp_HMM_fit,arglist)
-	# pool.close()
-	# pool.join()
-	# results = async_result.get()
-	return np.mean(results)
-
-"""
-A function to do multiprocessed model fitting
-"""
-def mp_HMM_fit(args):
-	##parse the input tuple
-	x = args[0]
-	actions=args[1]
-	p_rewarded = args[2]
-	switch_after=args[3]
-	b_a = args[4]
-	b_b = args[5]
 	alpha = x[0]
 	beta = x[1]
 	delta = x[2]
 	correct_mean = x[3]
 	incorrect_mean = x[4]
-	##init the task using the given session
-	task = bandit(actions,p_rewarded,switch_after)
-	##now, we can produce the outputs of the model given our params:
-	model = HMM_agent(task,actions,alpha,beta,delta,correct_mean,incorrect_mean)
-	for i in range(len(b_a)-1):
-		model.run()
-	p_a = model.log['p_a']
-	p_b = model.log['p_b']
-
-	##now let's compute the log-liklihood:
-	logL = log_liklihood(b_a,b_b,p_a,p_b)
-	##return the negative for our optimizer
-	return -logL
+	for i in range(n_trials):
+		##init the task using the given session
+		task = bandit(actions,p_rewarded,switch_after)
+		##now, we can produce the outputs of the model given our params:
+		model = HMM_agent(task,actions,alpha,beta,delta,correct_mean,incorrect_mean)
+		for i in range(len(b_a)-1):
+			model.run()
+		p_a = model.log['p_a']
+		p_b = model.log['p_b']
+		##now let's compute the log-liklihood:
+		logL = log_liklihood(b_a,b_b,p_a,p_b)
+		results.append(-logL)
+	return np.nanmean(results)
 
 """
 A function to get a sequence of switches
@@ -180,6 +190,77 @@ def get_bandit_info(f_behavior):
 	return actions,p_rewarded,block_lengths[:-1]
 
 """
+A function to construct bandit parameters using data from
+many sessions, as well as actual action data.
+Inputs:
+	-session_range: range of sessions to use data from
+Returns:
+	-parameters needed to initialize a task.bandit
+	b_a,b_b: behavioral choice at each trial (action a or action b, bool)
+"""
+def get_fit_info(session_range):
+	##set up some lists to concatenate everything
+	action_seq = []
+	context = []
+	outcomes = []
+	for f_behavior in file_lists.behavior_files:
+		##check to see if this file is in the specified range
+		if ptr.get_session_number(os.path.normpath(f_behavior)) in range(
+			session_range[0],session_range[1]):
+			##parse the data
+			trial_data = ptr.get_full_trials(f_behavior)
+			##add the data to the master lists
+			action_seq.append(np.asarray(trial_data['action']))
+			context.append(np.asarray(trial_data['context']))
+			outcomes.append(np.asarray(trial_data['outcome']))
+	action_seq = np.concatenate(action_seq)
+	context = np.concatenate(context)
+	outcomes = np.concatenate(outcomes)
+	##was a given action correct given the context
+	def is_correct(context,action):
+		if context == 'upper_rewarded':
+			if action == 'upper_lever':
+				result = True
+			elif action == 'lower_lever':
+				result = False
+		elif context == 'lower_rewarded':
+			if action == 'upper_lever':
+				result = False
+			elif action == 'lower_lever':
+				result = True
+		else:
+			print('Unknown context')
+			result = False
+		return result
+	##determine the emperical correct rewarded percentage
+	correct_rewarded = 0
+	correct_total = 0
+	for i in range(outcomes.size):
+		if is_correct(context[i],action_seq[i]):
+			correct_total +=1
+			if outcomes[i] == 'rewarded_poke':
+				correct_rewarded += 1
+	p_correct = float(correct_rewarded)/correct_total
+	##determine the order of actions
+	if context[0] == 'lower_rewarded':
+		actions = ['lower_lever','upper_lever']
+	elif context[0] == 'upper_rewarded':
+		actions = ['upper_lever','lower_lever']
+	b_a = (action_seq==actions[0]).astype(int)
+	b_b = (action_seq==actions[1]).astype(int)
+	##determine when the blocks switch
+	switch_after = []
+	last_context = context[0]
+	for i in range(context.size):
+		current_context = context[i]
+		if current_context != last_context:
+			switch_after.append(i)
+		last_context = current_context
+	return actions, p_correct, switch_after, b_a, b_b
+
+
+
+"""
 A function to compute the log liklihood given:
 Inputs:
 	-b_switch: a list of actual behavior, whether or
@@ -200,5 +281,78 @@ def log_liklihood(b_a,b_b,p_a,p_b):
 	return logL
 
 
+
+
+"""
+A function to parse model results in a similar
+way to how we would parse behavior data results.
+Inputs:
+	model: the model object
+	bandit: the bandit object
+Returns: 
+	event_data: event data from the model's behavior
+"""
+def parse_model_results(model,bandit):
+	##get some metadata about these things
+	n_trials = len(model.log['action'])
+	n_blocks = len(bandit.switch_after)
+	block_switch = bandit.switch_after
+	actions = bandit.actions
+	if actions[0] == 'upper_lever':
+		contexts = ['upper_rewarded','lower_rewarded']
+	elif actions[0] == 'lower_lever':
+		contexts = ['lower_rewarded','upper_rewarded']
+	columns = ['context','action','outcome']
+	##construct a pandas dataset for this data
+	trial_data = pd.DataFrame(index=range(n_trials),columns=columns)
+	##fill out the context info
+	trial_data['context'][0:block_switch[0]] = contexts[0]
+	for i in range(n_blocks-1):
+		trial_data['context'][block_switch[i]:block_switch[i+1]] = contexts[(i+1)%2]
+	prev_block = trial_data['context'][block_switch[-1]-1]
+	last_block = [x for x in contexts if not x == prev_block]
+	trial_data['context'][block_switch[-1]:] = last_block[0]
+	##the action data is easy...
+	trial_data['action'][:] =np.asarray(model.log['action'])
+	##outcome isn't that hard either
+	rewarded = np.where(np.asarray(model.log['outcome'])==1)[0]
+	unrewarded = np.where(np.asarray(model.log['outcome'])==0)[0]
+	trial_data['outcome'][rewarded] = 'rewarded_poke'
+	trial_data['outcome'][unrewarded] = 'unrewarded_poke'
+	correct_upper = []
+	correct_lower = []
+	incorrect_upper = []
+	incorrect_lower = []
+	correct_unrew_upper = []
+	correct_unrew_lower =[]
+	for i in range(n_trials):
+		if trial_data['action'][i] == 'upper_lever': ##case where it was an upper press
+			if trial_data['context'][i] == 'upper_rewarded': ##case where it was correct
+				if trial_data['outcome'][i] == 'rewarded_poke':
+					correct_upper.append(i)
+				elif trial_data['outcome'][i] == 'unrewarded_poke':
+					correct_unrew_upper.append(i)
+			elif trial_data['context'][i] == 'lower_rewarded':
+				incorrect_upper.append(i)
+		elif trial_data['action'][i] == 'lower_lever':
+			if trial_data['context'][i] == 'lower_rewarded':
+				if trial_data['outcome'][i] == 'rewarded_poke':
+					correct_lower.append(i)
+				elif trial_data['outcome'][i] == 'unrewarded_poke':
+					correct_unrew_lower.append(i)
+			elif trial_data['context'][i] == 'upper_rewarded':
+				incorrect_lower.append(i)
+		else:
+			print("Action does not fit any catagories: {}".format(trial_data['action'][i]))
+		event_data = {
+		'correct_upper':np.asarray(correct_upper),
+		'correct_lower':np.asarray(correct_lower),
+		'correct_unrew_upper':np.asarray(correct_unrew_upper),
+		'correct_unrew_lower':np.asarray(correct_unrew_lower),
+		'incorrect_upper':np.asarray(incorrect_upper),
+		'incorrect_lower':np.asarray(incorrect_lower),
+		'block_switches':np.asarray(block_switch)
+		}
+	return trial_data,event_data
 
 	

@@ -701,6 +701,44 @@ def plot_trials(f_behavior):
 	ax.legend(bbox_to_anchor=(1,1))
 
 """
+plots trial data from a model
+"""
+def plot_model_trials(event_data):
+	##get the data
+	correct_upper = event_data['correct_upper']
+	correct_lower = event_data['correct_lower']
+	corr_unrew_upper = event_data['correct_unrew_upper']
+	corr_unrew_lower = event_data['correct_unrew_lower']
+	incorrect_upper = event_data['incorrect_upper']
+	incorrect_lower = event_data['incorrect_lower']
+	##create the plot
+	fig, ax = plt.subplots(1)
+	##mark the rule changes
+	ax.vlines(event_data['block_switches'], 0.5, 2.5, colors = 'r', linestyles = 'dashed', 
+		linewidth = '2', alpha = 0.5)
+	##now plot the presses
+	ax.plot(correct_upper,np.ones(correct_upper.size)*2+np.random.uniform(-0.2,0.2,size=correct_upper.size),
+		linestyle='none',marker='o',color='r',label='correct upper')
+	ax.plot(correct_lower,np.ones(correct_lower.size)+np.random.uniform(-0.2,0.2,size=correct_lower.size),
+		linestyle='none',marker='o',color='b',label='correct lower')
+	ax.plot(incorrect_upper,np.ones(incorrect_upper.size)*2+np.random.uniform(-0.2,0.2,size=incorrect_upper.size),
+		linestyle='none',marker='x',color='r',label='incorrect upper')
+	ax.plot(incorrect_lower,np.ones(incorrect_lower.size)+np.random.uniform(-0.2,0.2,size=incorrect_lower.size),
+		linestyle='none',marker='x',color='b',label='incorrect lower')
+	ax.plot(corr_unrew_upper,np.ones(corr_unrew_upper.size)*1.7+np.random.uniform(-0.2,0.2,size=corr_unrew_upper.size),
+		linestyle='none',marker='o',color='r',markerfacecolor='none',label='correct unrewarded upper')
+	ax.plot(corr_unrew_lower,np.ones(corr_unrew_lower.size)*1.3+np.random.uniform(-0.2,0.2,size=corr_unrew_lower.size),
+		linestyle='none',marker='o',color='b',markerfacecolor='none',label='correct unrewarded lower')
+	ax.set_xlabel("Trials",fontsize=14)
+	ax.set_yticks([1,2])
+	ax.set_yticklabels(['Lower\npress','Upper\npress'])
+	for tick in ax.xaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	for tick in ax.yaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	ax.set_title("Model performance",fontsize=14)
+	ax.legend(bbox_to_anchor=(1,1))
+"""
 Plots the distributions of trial durations early to late, as well as overall
 """
 def plot_trial_durations(early_range=[0,5],late_range=[13,20],max_duration=30*1000):

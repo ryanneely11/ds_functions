@@ -3,6 +3,7 @@
 
 import numpy as np
 
+
 """
 A class to implement a reinforcement learning
 agent, using the Rescorla-Wagner rule.
@@ -24,7 +25,7 @@ class RL_agent(object):
 		self.log = {
 		'Qa':[0.5], ##action values of action a, updated each trial
 		'Qb':[0.5], ##action value of action b
-		'reward':[0], ##reward history
+		'outcome':[0], ##reward history
 		'action':[actions[0]], ##action history
 		'p_switch':[0.5], ##switch probability for comparing to state-based model
 		'p_a':[0.5], ##probability of action a

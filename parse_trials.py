@@ -9,6 +9,7 @@ import parse_ephys as pe
 import h5py
 import pandas as pd
 import file_lists
+import os
 
 
 """
@@ -786,7 +787,7 @@ def get_session_number(fname):
 	##first figure out what animal this session is from
 	animal = fname[-11:-9]
 	##get all the behavior files from this animal
-	ani_files = [x for x in file_lists.behavior_files if x[-11:-9] == animal]
+	ani_files = [os.path.normpath(x) for x in file_lists.behavior_files if x[-11:-9] == animal]
 	##now get the position of this file in the full list
 	return ani_files.index(fname)
 
