@@ -37,7 +37,7 @@ class RL_agent(object):
 		##if this is the first trial, seed the initial action values
 		Qa_last = self.log['Qa'][-1] ##the last predicted action value
 		Qb_last = self.log['Qb'][-1]
-		reward_last = self.log['reward'][-1]
+		reward_last = self.log['outcome'][-1]
 		action_last = self.log['action'][-1]
 		##we only update the action value of the action that we had experience 
 		##with on the last trial
@@ -59,7 +59,7 @@ class RL_agent(object):
 		##finally, we can log all of the events from this action
 		self.log['Qa'].append(Qa_prior)
 		self.log['Qb'].append(Qb_prior)
-		self.log['reward'].append(reward)
+		self.log['outcome'].append(reward)
 		self.log['action'].append(action)
 		self.log['p_switch'].append(p_switch)
 		self.log['p_a'].append(Pa)

@@ -11,6 +11,7 @@ from scipy.optimize import minimize,brute,fmin_slsqp
 import file_lists
 import os
 import pandas as pd
+import itertools
 
 """
 A function to perform optimization on RL_models.
@@ -48,7 +49,7 @@ def fit_HMM_model(session_range):
 	delta_bounds = (0,1)
 	correct_mean_bounds = (0,1)
 	incorrect_mean_bounds = (0,1)
-	bounds = bounds=[alpha_bounds,beta_bounds,delta_bounds,
+	bounds = [alpha_bounds,beta_bounds,delta_bounds,
 	correct_mean_bounds,incorrect_mean_bounds]
 	##get behavior data to fit the model to
 	actions,p_rewarded,switch_after,b_a,b_b = get_fit_info(session_range)
@@ -71,6 +72,9 @@ def brute_optimize(func,ranges,gridspace=100):
 	for i in range(n_params):
 		r = ranges[0]
 		gridpoints.append(np.linspace(r[0],r[1],gridspace))
+	##create a generator to return all combinations of possible param values
+	for combination in itertools.product(*gridpoints):
+		pass
 	
 
 
@@ -88,24 +92,37 @@ Returns:
 	mean negative log-liklihood of model score
 """
 def score_RL_model(x,actions,p_rewarded,switch_after,b_a,b_b):
-	n_trials = 20
-	results = []
-	alpha = x[0]
-	beta = x[1]
-	eta = x[2]
-	for i in range(n_trials):
-		##init the task using the given session
-		task = bandit(actions,p_rewarded,switch_after)
-		##now, we can produce the outputs of the model given our params:
-		model = RL_agent(task,actions,alpha,beta,eta)
-		for i in range(len(b_a)-1):
-			model.run()
-		p_a = model.log['p_a']
-		p_b = model.log['p_b']
-		##now let's compute the log-liklihood:
-		logL = log_liklihood(b_a,b_b,p_a,p_b)
-		results.append(-logL)
-	return np.nanmean(results)
+	##see if the input parameters are in bounds.
+	alpha_bounds = (0,10)
+	beta_bounds = (0,100)
+	delta_bounds = (0,1)
+	correct_mean_bounds = (0,1)
+	incorrect_mean_bounds = (0,1)
+	bounds = [alpha_bounds,beta_bounds,delta_bounds,
+	correct_mean_bounds,incorrect_mean_bounds]
+	if check_bounds(x,bounds):
+		n_trials = 20
+		results = []
+		alpha = x[0]
+		beta = x[1]
+		eta = x[2]
+		for i in range(n_trials):
+			##init the task using the given session
+			task = bandit(actions,p_rewarded,switch_after)
+			##now, we can produce the outputs of the model given our params:
+			model = RL_agent(task,actions,alpha,beta,eta)
+			for i in range(len(b_a)-1):
+				model.run()
+			p_a = model.log['p_a']
+			p_b = model.log['p_b']
+			##now let's compute the log-liklihood:
+			logL = log_liklihood(b_a,b_b,p_a,p_b)
+			results.append(-logL)
+		results = np.nanmean(results)
+	##if the params are not in bounds, return a large number
+	else:
+		results = 10000.0
+	return results
 
 """
 a function to return the negative log-liklihood of
@@ -294,7 +311,20 @@ def log_liklihood(b_a,b_b,p_a,p_b):
 		(b_b*np.log(p_b)).sum()/b_b.sum())
 	return logL
 
-
+"""
+A function to check if a set of parameters is in bounds.
+Inputs:
+	x: parameter set
+	bounds: list of tuples with [min,max] bounds
+Returns:
+	is_valid: if True, parameters are in bounds
+"""
+def check_bounds(x,bounds):
+	is_valid = True
+	for param,bound in zip(x,bounds):
+		if param <= bound[0] or param >= bound[1]:
+			is_valid = False
+	return is_valid
 
 
 """
