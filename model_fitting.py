@@ -287,7 +287,7 @@ def get_fit_info(session_range):
 		if current_context != last_context:
 			switch_after.append(i)
 		last_context = current_context
-	return actions, p_correct, switch_after, b_a, b_b
+	return actions,p_correct,switch_after,b_a,b_b,(outcomes=='rewarded_poke').astype(int)
 
 
 
