@@ -738,6 +738,22 @@ def plot_model_trials(event_data):
 		tick.label.set_fontsize(14)
 	ax.set_title("Model performance",fontsize=14)
 	ax.legend(bbox_to_anchor=(1,1))
+
+"""
+Plots data from sequential monte carlo simulation
+"""
+def plot_smc_hmm(e,actions,outcomes):
+	plt.plot(e[0,:])
+	x_lower = np.where(actions==0)[0]
+	x_upper = np.where(actions==1)[0]
+	upper_outcomes = outcomes[x_upper]
+	lower_outcomes = outcomes[x_lowet]
+	plt.plot(x_lower,lower_outcomes,color='b',marker='o',linestyle='none')
+	plt.plot(x_upper,upper_outcomes,color='r',marker='o',linestyle='none')
+
+
+
+
 """
 Plots the distributions of trial durations early to late, as well as overall
 """

@@ -15,10 +15,7 @@ Returns:
 	e_val: expected value of hidden parameters
 	v_val: variances of hidden parameters
 """
-def SMC(action_seq,reward_seq,init_p,sd_jitter):
-	##TODO: add these to the input params
-	updatef = rescorlawagner
-	observef = action_prob
+def SMC(action_seq,reward_seq,init_p,sd_jitter,updatef,observef):
 	##initialize some params
 	assert action_seq.size == reward_seq.size
 	n_trials = action_seq.size
@@ -45,65 +42,6 @@ def SMC(action_seq,reward_seq,init_p,sd_jitter):
 			)*np.outer(sd_jitter,np.ones(n_particles))
 	return e_val,v_val
 
-"""
-An update function based on the rescorla wagner rule. Simply 
-updates the action value of an action by the difference between
-the expected and actual reward, multiplied by alpha(the learning rate).
-Inputs:
-	-action: the action taken in this trial
-	-outcome: the outcome for the given action
-	-particles: the particle samples representing the PDF of
-		the hidden variables, where
-			-index[0,:] = action values for choice a
-			-index[1,:] = action values for choice b
-			-index[2,:] = alpha parameter (indecision point)
-			-index[3,:] = beta parameter (inverse temperature)
-			-index[4,:] = eta parameter (learning rate)
-Returns:
-	particle_next:
-"""
-def rescorlawagner(action,reward,particles):
-	eta = np.exp(particles[2,:]) ##the particles representing the alpha var
-	particles[int(action-1),:] = particles[int(action-1),:]+eta*(
-		reward-particles[int(action-1),:])
-	return particles
-
-"""
-Compute the probability of choosing 
-action a (Pa), then make a choice based on this probability.
-Inputs:
-	action: action taken last time
-	particles, where 
-		-index[0,:] = action values for choice a
-		-index[1,:] = action values for choice b
-		-index[2,:] = eta parameter (learning rate)
-		-index[3,:] = beta parameter (inverse temperature)
-		-index[4,:] = alpha parameter (indecision point)
-Returns:
-	Pa, probability of action a
-	action: chosen action
-	p_switch: probability of switching actions
-"""
-def action_prob(action,particles):
-	##probability of choosing action a
-	a_scalar = -2*(action-1.5) ##flip the sign for action a or b
-	Qa = particles[0,:]
-	Qb = particles[1,:]
-	beta = np.exp(particles[3,:])
-	alpha = np.exp(particles[4,:])
-	Pa = luce_choice((a_scalar*beta)*((Qb-Qa)-alpha))
-	return Pa
-
-"""
-A helper function to imlement the 
-Luce Choice Rule.
-Inputs:
-	z: value to use in computation
-returns:
-	Pa: action probability
-"""
-def luce_choice(z):
-	return 1.0/(1+np.exp(-z))
 
 """
 An alternate form of action selection, that doesn't
@@ -164,15 +102,6 @@ def pdf2rand(pdf,n_samp):
 		nn = (accept==0).sum()
 	return sample
 
-"""
-A function to initialize parameters for the RL model
-"""
-def init_p_RL(n_particles):
-	p = np.random.randn(5,n_particles)+0.5
-	p[2,:] = np.random.rand(n_particles)+np.log(0.1)#eta
-	p[3,:] = np.random.rand(n_particles) #beta
-	p[4,:] = np.random.rand(n_particles) #alpha
-	return p
 
 def simple_resampling(pdf,n_samp):
 	return pdf2rand(pdf,n_samp)
@@ -180,28 +109,175 @@ def simple_resampling(pdf,n_samp):
 
 ####################################################
 ####################################################
-#############      HMM    ###########################
-
-def HMM_update(action,reward,particles):
-	Xt = particles[0,:] ##the state value
-	delta = particles[3,:] ##the transition probability
-	corr_mean = particles[4,:] ##the probability of a reward when correct
-	incorr_mean = particles[5,:]
-
-
+#############    RL model  #########################
 """
-A function to compute the Bayesian prior based on the upcoming choice, the 
-posterior from the previous trial, and the transition probability.
+A function to initialize random parameters for the RL model
+"""
+def init_p_RL(n_particles):
+	p = np.random.randn(5,n_particles)+0.5
+	p[2,:] = np.random.rand(n_particles)+np.log(0.1)#eta
+	p[3,:] = np.random.rand(n_particles) #beta
+	p[4,:] = np.random.rand(n_particles) #alpha
+	return p
+"""
+A function to convert an array of action strings,
+ie 'upper_lever' into ints. In this case, upper = 2,
+lower = 1.
 Input:
-	choice; 'switch' or 'stay'
-	Xt: posterior probability of the state distribution
-Returns: 
-	prior_Xt: estimate that the current state is correct
+	action_names: list or array of action strings
+Returns:
+	actions: array where strings are converted to int codes
 """
-def compute_prior(choice,Xt,delta):
+def convert_actions_RL(action_names):
+	actions = np.zeros(len(action_names))
+	upper = np.where(action_names=='upper_lever')[0]
+	lower = np.where(action_names=='lower_lever')[0]
+	actions[upper] = 2
+	actions[lower] = 1
+	return actions
+
+"""
+An update function based on the rescorla wagner rule. Simply 
+updates the action value of an action by the difference between
+the expected and actual reward, multiplied by alpha(the learning rate).
+Inputs:
+	-action: the action taken in this trial
+	-outcome: the outcome for the given action
+	-particles: the particle samples representing the PDF of
+		the hidden variables, where
+			-index[0,:] = action values for choice a
+			-index[1,:] = action values for choice b
+			-index[2,:] = alpha parameter (indecision point)
+			-index[3,:] = beta parameter (inverse temperature)
+			-index[4,:] = eta parameter (learning rate)
+Returns:
+	particle_next:
+"""
+def rescorlawagner(action,reward,particles):
+	eta = np.exp(particles[2,:]) ##the particles representing the alpha var
+	particles[int(action-1),:] = particles[int(action-1),:]+eta*(
+		reward-particles[int(action-1),:])
+	return particles
+
+"""
+Compute the probability of choosing 
+action a (Pa), then make a choice based on this probability.
+Inputs:
+	action: action taken last time
+	particles, where 
+		-index[0,:] = action values for choice a
+		-index[1,:] = action values for choice b
+		-index[2,:] = eta parameter (learning rate)
+		-index[3,:] = beta parameter (inverse temperature)
+		-index[4,:] = alpha parameter (indecision point)
+Returns:
+	Pa, probability of action a
+	action: chosen action
+	p_switch: probability of switching actions
+"""
+def action_prob(action,particles):
+	##probability of choosing action a
+	a_scalar = -2*(action-1.5) ##flip the sign for action a or b ###IMPORTANT!
+	Qa = particles[0,:]
+	Qb = particles[1,:]
+	beta = np.exp(particles[3,:])
+	alpha = np.exp(particles[4,:])
+	Pa = luce_choice((a_scalar*beta)*((Qb-Qa)-alpha))
+	return Pa
+
+"""
+A helper function to imlement the 
+Luce Choice Rule.
+Inputs:
+	z: value to use in computation
+returns:
+	Pa: action probability
+"""
+def luce_choice(z):
+	return 1.0/(1+np.exp(-z))
+####################################################
+####################################################
+#############   HMM  model  ########################
+"""
+A function to initialize random parameters for the RL model
+"""
+def init_p_HMM(n_particles):
+	p = np.random.rand(6,n_particles) ##Xt
+	p[1,:] = np.random.randn(n_particles)/10.0 ##alpha
+	p[2,:] = np.random.rand(n_particles)*np.log(25)#beta
+	p[4,:] = np.ones(n_particles)*0.8+np.random.randn()/10
+	p[5,:] = np.zeros(n_particles)+np.random.randn()/10
+	return p
+
+
+"""
+ Converts an array of action types into a switch/no switch
+ array. 
+ Inputs:
+ 	actions: list/array of action labels
+ Returns:
+ 	choice: array of switch(2) or stay(1) values
+ """
+def convert_actions_HMM(actions):
+	choice = np.zeros(len(actions))
+	last = actions[0]
+	for i in range(len(actions)):
+		if actions[i] == last:
+			choice[i] = 1 ##stay
+		else:
+			choice[i] = 2 ##switch
+		last = actions[i]
+	return choice
+
+"""
+A function to compute the posterior  probability, P(Xt) correct.
+Inputs:
+	Action is the action taken; 1 = stay, 2 = switch
+	outcome is the outcome of the trial; 1 = reward; 0 = no reward
+	Particles are an array of state distribution values, where:
+		Particles[0,:] = Xt (State estimate)
+		Particles[1,:] = alpha (equality point)
+		Particles[2,:] = beta (inverse temperature)
+		Particles[3,:] = delta (state transition probability)
+		Particles[4,:] = correct mean
+		Particles[5,:] = incorrect mean
+Returns: 
+	Particles, updated with new Xt values 
+"""
+def compute_posterior(action,outcome,particles):
+	Xt_last = particles[0,:]
+	delta = particles[3,:]
+	correct_mean = particles[4,:]
+	incorrect_mean = particles[5,:]
 	##get the transition probabilities for the different states
-	P_trans = self.compute_p_transition(choice,delta) ##this is a list with 2 values
-	return (P_trans[0]*posterior_Xt)+(P_trans[1]*(1-posterior_Xt))
+	P_trans = compute_p_transition(action,delta) ##this is a list with 2 values
+	prior = (P_trans[0]*Xt_last)+(P_trans[1]*(1-Xt_last))
+	##compute the probability of this outcome given different state possibilities
+	P_outcomes = compute_p_outcome(outcome,correct_mean,incorrect_mean)
+	Xt = (P_outcomes[0]*prior)/((P_outcomes[0]*prior)+(
+		P_outcomes[1]*(1-prior)))
+	##now update the particles with this value
+	particles[0,:] = Xt
+	return particles
+
+"""
+A function to compute the probability of recieving a reward given
+being in one of the states. 
+Inputs:
+	reward value, either 1 or 0
+Returns:
+	P_outcomes: the probability of receiving the given outcome
+		assuming you were in [state1(correct), state2(incorrect)]
+"""
+def compute_p_outcome(outcome,correct_mean,incorrect_mean):
+	P_outcomes = [0,0]
+	if outcome == 1:
+		P_outcomes[0] = correct_mean
+		P_outcomes[1] = 1-P_outcomes[0]
+	elif outcome == 0:
+		P_outcomes[0] = incorrect_mean
+		P_outcomes[1] = 1-P_outcomes[0]
+	return P_outcomes
 
 """
 Returns the probability that the state is correct given the choice to stay or 
@@ -215,53 +291,36 @@ Retuns:
 """
 def compute_p_transition(choice,delta):
 	P_transition = [0,0]
-	if choice == 'switch':
-		P_transition[0] = self.delta ##case where the state was correct but we switched
-		P_transition[1] = 1-self.delta ##case where the state was incorrect and we switched
-	elif choice == 'stay':
-		P_transition[0] = 1-self.delta
-		P_transition[1] = self.delta
+	if choice == 2: ##2 == switch
+		P_transition[0] = delta ##case where the state was correct but we switched
+		P_transition[1] = 1-delta ##case where the state was incorrect and we switched
+	elif choice == 1: ##1 == stay
+		P_transition[0] = 1-delta
+		P_transition[1] = delta
 	return P_transition
 
-"""
-A function to compute the posterior given the outcome of the trial, 
-as well as the prior, and some info about the reward probabilities.
-Inputs:
-	outcome: the outcome of the current trial
-	prior_Xt: the prior estimate of the current trial
-Returns:
-	posterior_Xt
-"""
-def compute_posterior(outcome,prior_Xt):
-	##compute the probability of this outcome given different state possibilities
-	P_outcomes = self.compute_p_outcome(outcome)
-	posterior = (P_outcomes[0]*prior_Xt)/((P_outcomes[0]*prior_Xt)+(
-		P_outcomes[1]*(1-prior_Xt)))
-	#diagnostics:
-	if posterior < 0 or posterior > 1:
-		print("posterior error: prior={}, p_outcome[0]={}, p_outcome[1]={}".format(
-			prior_Xt,P_outcomes[0],P_outcomes[1]))
-	return posterior
+def compute_weights(action,particles):
+	##the posterior probability that the current state is correct
+	Xt = particles[0,:]
+	alpha = particles[1,:]
+	beta = particles[2,:]
+	##note the sign here- positive when action = switch,
+	##because we are computing p_switch
+	a_scalar = 2*(action-1.5) 
+	return sigmoid_choice(Xt,alpha,beta*a_scalar)
+
 
 """
-A function to compute the probability of recieving a reward given
-being in one of the states. 
-Inputs:
-	reward value, either 1 or 0
-Returns:
-	P_outcomes: the probability of receiving the given outcome
-		assuming you were in [state1(correct), state2(incorrect)]
+An alternate sigmoidal choice function
 """
-def compute_p_outcome(outcome):
-	P_outcomes = [0,0]
-	if outcome == 1:
-		P_outcomes[0] = np.random.binomial(10,self.correct_mean)/10
-		P_outcomes[1] = 1-P_outcomes[0]
-	elif outcome == 0:
-		P_outcomes[0] = np.random.binomial(10,self.incorrect_mean)/10
-		P_outcomes[1] = 1-P_outcomes[0]
-	##make sure we don't have any zeros
-	for i in range(len(P_outcomes)):
-		if P_outcomes[i] == 0:
-			P_outcomes[i] = 0.02
-	return P_outcomes
+def sigmoid_choice(z,alpha,beta):
+	return 1.0/(1+np.exp(-beta*(z-alpha)))
+
+def action_prob2(action,particles):
+	##probability of choosing action a
+	a_scalar = 2*(action-1.5) ##flip the sign for action a or b ###IMPORTANT!
+	Xt_incorrect = 1-particles[0]
+	beta = np.exp(particles[2,:])
+	alpha = np.exp(particles[1,:])
+	P_switch = luce_choice((a_scalar*beta)*(Xt_incorrect-alpha))
+	return P_switch
