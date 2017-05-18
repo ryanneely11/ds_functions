@@ -40,11 +40,10 @@ Inputs:
 		the hidden variables, where
 			-index[0,:] = action values for choice a
 			-index[1,:] = action values for choice b
-			-index[2,:] = alpha parameter (indecision point)
+			-index[2,:] = eta parameter (learning rate)
 			-index[3,:] = beta parameter (inverse temperature)
-			-index[4,:] = eta parameter (learning rate)
 Returns:
-	particle_next:
+	particle_next: updated particles array
 """
 def rescorlawagner(action,reward,particles):
 	eta = np.exp(particles[2,:]) ##the particles representing the alpha var
@@ -78,4 +77,16 @@ Returns:
 	actions: an int array of the actual actions taken
 """
 def compute_actions(Qa,Qb,Beta):
-	pass
+	Beta = np.exp(Beta)
+	choices = np.array([1,2])
+	actions = np.zeros(Qa.shape)
+	Pa = np.zeros(Qa.shape)
+	for i in range(Qa.size):
+		qa = Qa[i]
+		qb = Qb[i]
+		beta = Beta[i]
+		pa = 1.0/(1+np.exp(beta*(qb-qa)))
+		probs = np.array([pa,1-pa])
+		actions[i] = np.random.choice(choices,p=probs)
+		Pa[i] = pa
+	return actions,Pa

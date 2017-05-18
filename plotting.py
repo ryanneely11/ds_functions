@@ -22,6 +22,7 @@ import matplotlib
 import collections
 import tensortools as tt
 from tensor_analysis import align_factors, _validate_factors
+import model_fitting as mf
 
 """
 A function to plot examplar units from logistic regression, from one session at a time.
@@ -72,9 +73,6 @@ def plot_example_log_units(f_data,sig_level=0.05,test_type='pvals',accuracy_thre
 						tick.label.set_fontsize(14)
 					ax.set_title(epoch,fontsize=14,weight='bold')
 					ax.legend()
-
-
-
 
 
 """
@@ -286,8 +284,6 @@ def plot_rev_curves(early_range=[0,5],late_range=[-6,-1],window=[80,80],save=Fal
 		fig.savefig("/Volumes/Untitled/Ryan/DS_animals/plots/switch_curves.svg")
 
 
-
-
 """
 A function to plot performance (correct press/all presses)
 for all animals across sessions.
@@ -351,9 +347,6 @@ def plot_performance_all(save=False):
 	if save:
 		fig.savefig("/Volumes/Untitled/Ryan/DS_animals/plots/performance.png")
 		fig.savefig("/Volumes/Untitled/Ryan/DS_animals/plots/performance.svg")
-
-
-
 
 
 """
@@ -703,56 +696,131 @@ def plot_trials(f_behavior):
 """
 plots trial data from a model
 """
-def plot_model_trials(event_data):
-	##get the data
-	correct_upper = event_data['correct_upper']
-	correct_lower = event_data['correct_lower']
-	corr_unrew_upper = event_data['correct_unrew_upper']
-	corr_unrew_lower = event_data['correct_unrew_lower']
-	incorrect_upper = event_data['incorrect_upper']
-	incorrect_lower = event_data['incorrect_lower']
-	##create the plot
-	fig, ax = plt.subplots(1)
-	##mark the rule changes
-	ax.vlines(event_data['block_switches'], 0.5, 2.5, colors = 'r', linestyles = 'dashed', 
-		linewidth = '2', alpha = 0.5)
-	##now plot the presses
-	ax.plot(correct_upper,np.ones(correct_upper.size)*2+np.random.uniform(-0.2,0.2,size=correct_upper.size),
-		linestyle='none',marker='o',color='r',label='correct upper')
-	ax.plot(correct_lower,np.ones(correct_lower.size)+np.random.uniform(-0.2,0.2,size=correct_lower.size),
-		linestyle='none',marker='o',color='b',label='correct lower')
-	ax.plot(incorrect_upper,np.ones(incorrect_upper.size)*2+np.random.uniform(-0.2,0.2,size=incorrect_upper.size),
-		linestyle='none',marker='x',color='r',label='incorrect upper')
-	ax.plot(incorrect_lower,np.ones(incorrect_lower.size)+np.random.uniform(-0.2,0.2,size=incorrect_lower.size),
-		linestyle='none',marker='x',color='b',label='incorrect lower')
-	ax.plot(corr_unrew_upper,np.ones(corr_unrew_upper.size)*1.7+np.random.uniform(-0.2,0.2,size=corr_unrew_upper.size),
-		linestyle='none',marker='o',color='r',markerfacecolor='none',label='correct unrewarded upper')
-	ax.plot(corr_unrew_lower,np.ones(corr_unrew_lower.size)*1.3+np.random.uniform(-0.2,0.2,size=corr_unrew_lower.size),
-		linestyle='none',marker='o',color='b',markerfacecolor='none',label='correct unrewarded lower')
+def plot_model_fits(f_behavior):
+	##get the model fits
+	results = mf.fit_models(f_behavior)
+	actions = results['actions']
+	outcomes = results['outcomes']
+	RL_actions = results['RL_actions']
+	HMM_actions = results['HMM_actions']
+	first_block = results['first_block']
+	##different block start times
+	block_starts = np.concatenate([np.array([0]),results['switch_times']])
+	switch_times = results['switch_times']
+	if results['first_block'] == 'lower_rewarded':
+		colors = []
+		for i in range(len(block_starts)):
+			if i%2 == 0:
+				colors.append('b')
+			else:
+				colors.append('r')
+	elif results['first_block'] == 'upper_rewarded':
+		colors = []
+		for i in range(len(block_starts)):
+			if i%2 == 0:
+				colors.append('r')
+			else:
+				colors.append('b')
+	##a sub-function to figure out which actions were rewarded
+	def parse_actions(actions,outcomes,switch_times,first_block):
+		conditions = {
+		'upper_rewarded':[],
+		'lower_rewarded':[]
+		}
+		current_block = first_block
+		trial_idx = 0
+		for t in range(len(switch_times-1)):
+			##the trial numbers for this block
+			trialnums = list(range(trial_idx,switch_times[t]))
+			conditions[current_block]+=(trialnums)
+			trial_idx = switch_times[t]
+			current_block = [x for x in list(conditions) if not x == current_block][0]
+		##the last block
+		conditions[current_block]+=(list(range(trial_idx,len(actions))))
+		##now parse the actions
+		upper_rewarded = [] #correct
+		upper_unrewarded = [] #correct
+		upper_incorrect = [] #incorrect
+		lower_rewarded = []
+		lower_unrewarded = []
+		lower_incorrect = []
+		##start with lower lever actions
+		for trial in np.where(actions==1)[0]:
+			if trial in conditions['upper_rewarded']:
+				lower_incorrect.append(trial)
+			elif trial in conditions['lower_rewarded'] and outcomes[trial] == 1:
+				lower_rewarded.append(trial)
+			elif trial in conditions['lower_rewarded'] and outcomes[trial] == 0:
+				lower_unrewarded.append(trial)
+		for trial in np.where(actions==2)[0]:
+			if trial in conditions['lower_rewarded']:
+				upper_incorrect.append(trial)
+			elif trial in conditions['upper_rewarded'] and outcomes[trial] == 1:
+				upper_rewarded.append(trial)
+			elif trial in conditions['upper_rewarded'] and outcomes[trial] == 0:
+				upper_unrewarded.append(trial)
+		return upper_rewarded,upper_unrewarded,upper_incorrect,lower_rewarded,lower_unrewarded,lower_incorrect
+	##create the plot for HMM
+	fig = plt.figure()
+	ax = fig.add_subplot(211)
+	ax2 = ax.twinx()
+	##plot the block switches
+	ax.vlines(block_starts,-0.2,1.2,linestyle='dashed',linewidth=2,colors=colors)
+	##the belief state for lower lever
+	ax2.plot(results['e_HMM'][0,:],linewidth=2,color='k')
+	##the actual actions
+	upper_rewarded,upper_unrewarded,upper_incorrect,lower_rewarded,lower_unrewarded,lower_incorrect = parse_actions(actions,outcomes,switch_times,first_block)
+	ax.plot(upper_rewarded,np.ones(len(upper_rewarded))*1.25+np.random.uniform(-0.04,0.04,size=len(upper_rewarded)),marker='o',color='r',linestyle='none')
+	ax.plot(upper_unrewarded,np.ones(len(upper_unrewarded))*1.25+np.random.uniform(-0.04,0.04,size=len(upper_unrewarded)),marker='o',markerfacecolor='none',color='r',linestyle='none')
+	ax.plot(upper_incorrect,np.ones(len(upper_incorrect))*1.25+np.random.uniform(-0.04,0.04,size=len(upper_incorrect)),linestyle='none',marker='+',color='b')
+	ax.plot(lower_rewarded,np.zeros(len(lower_rewarded))+np.random.uniform(-0.04,0.04,size=len(lower_rewarded)),marker='o',color='b',linestyle='none')
+	ax.plot(lower_unrewarded,np.zeros(len(lower_unrewarded))+np.random.uniform(-0.04,0.04,size=len(lower_unrewarded)),marker='o',markerfacecolor='none',color='b',linestyle='none')
+	ax.plot(lower_incorrect,np.zeros(len(lower_incorrect))+np.random.uniform(-0.04,0.04,size=len(lower_incorrect)),linestyle='none',marker='+',color='b')
+	##the model actions
+	upper_rewarded,upper_unrewarded,upper_incorrect,lower_rewarded,lower_unrewarded,lower_incorrect = parse_actions(HMM_actions,outcomes,switch_times,first_block)
+	ax.plot(upper_rewarded,np.ones(len(upper_rewarded))+np.random.uniform(-0.04,0.04,size=len(upper_rewarded)),marker='o',color='r',linestyle='none')
+	ax.plot(upper_unrewarded,np.ones(len(upper_unrewarded))+np.random.uniform(-0.04,0.04,size=len(upper_unrewarded)),marker='o',markerfacecolor='none',color='r',linestyle='none')
+	ax.plot(upper_incorrect,np.ones(len(upper_incorrect))+np.random.uniform(-0.04,0.04,size=len(upper_incorrect)),linestyle='none',marker='+',color='b')
+	ax.plot(lower_rewarded,np.zeros(len(lower_rewarded))-0.25+np.random.uniform(-0.04,0.04,size=len(lower_rewarded)),marker='o',color='b',linestyle='none')
+	ax.plot(lower_unrewarded,np.zeros(len(lower_unrewarded))-0.25+np.random.uniform(-0.04,0.04,size=len(lower_unrewarded)),marker='o',markerfacecolor='none',color='b',linestyle='none')
+	ax.plot(lower_incorrect,np.zeros(len(lower_incorrect))-0.25+np.random.uniform(-0.04,0.04,size=len(lower_incorrect)),linestyle='none',marker='+',color='b')
+	ax.set_yticks([-0.25,0,1,1.25])
+	ax.set_yticklabels(['Predicted','Actual','Predicted','Actual'])
+	ax2.set_ylabel("Belief = lower_rewarded")
+	ax.set_title("Hidden Markov model fit",fontsize=14)
+	ax.set_xticks([])
+	ax.text(10,0.35,"Log-liklihood:{0:.3f}".format(results['ll_HMM']))
+	##create the plot for RL
+	ax = fig.add_subplot(212)
+	ax2 = ax.twinx()
+	##plot the block switches
+	ax.vlines(block_starts,-0.2,1.2,linestyle='dashed',linewidth=2,colors=colors)
+	##the belief state for lower lever
+	ax2.plot(results['e_RL'][0,:],linewidth=2,color='b')
+	ax2.plot(results['e_RL'][1,:],linewidth=2,color='r')
+	##the actual actions
+	upper_rewarded,upper_unrewarded,upper_incorrect,lower_rewarded,lower_unrewarded,lower_incorrect = parse_actions(actions,outcomes,switch_times,first_block)
+	ax.plot(upper_rewarded,np.ones(len(upper_rewarded))*1.25+np.random.uniform(-0.04,0.04,size=len(upper_rewarded)),marker='o',color='r',linestyle='none')
+	ax.plot(upper_unrewarded,np.ones(len(upper_unrewarded))*1.25+np.random.uniform(-0.04,0.04,size=len(upper_unrewarded)),marker='o',markerfacecolor='none',color='r',linestyle='none')
+	ax.plot(upper_incorrect,np.ones(len(upper_incorrect))*1.25+np.random.uniform(-0.04,0.04,size=len(upper_incorrect)),linestyle='none',marker='+',color='r')
+	ax.plot(lower_rewarded,np.zeros(len(lower_rewarded))+np.random.uniform(-0.04,0.04,size=len(lower_rewarded)),marker='o',color='b',linestyle='none')
+	ax.plot(lower_unrewarded,np.zeros(len(lower_unrewarded))+np.random.uniform(-0.04,0.04,size=len(lower_unrewarded)),marker='o',markerfacecolor='none',color='b',linestyle='none')
+	ax.plot(lower_incorrect,np.zeros(len(lower_incorrect))+np.random.uniform(-0.04,0.04,size=len(lower_incorrect)),linestyle='none',marker='+',color='b')
+	##the model actions
+	upper_rewarded,upper_unrewarded,upper_incorrect,lower_rewarded,lower_unrewarded,lower_incorrect = parse_actions(RL_actions,outcomes,switch_times,first_block)
+	ax.plot(upper_rewarded,np.ones(len(upper_rewarded))+np.random.uniform(-0.04,0.04,size=len(upper_rewarded)),marker='o',color='r',linestyle='none')
+	ax.plot(upper_unrewarded,np.ones(len(upper_unrewarded))+np.random.uniform(-0.04,0.04,size=len(upper_unrewarded)),marker='o',markerfacecolor='none',color='r',linestyle='none')
+	ax.plot(upper_incorrect,np.ones(len(upper_incorrect))+np.random.uniform(-0.04,0.04,size=len(upper_incorrect)),linestyle='none',marker='+',color='r')
+	ax.plot(lower_rewarded,np.zeros(len(lower_rewarded))-0.25+np.random.uniform(-0.04,0.04,size=len(lower_rewarded)),marker='o',color='b',linestyle='none')
+	ax.plot(lower_unrewarded,np.zeros(len(lower_unrewarded))-0.25+np.random.uniform(-0.04,0.04,size=len(lower_unrewarded)),marker='o',markerfacecolor='none',color='b',linestyle='none')
+	ax.plot(lower_incorrect,np.zeros(len(lower_incorrect))-0.25+np.random.uniform(-0.04,0.04,size=len(lower_incorrect)),linestyle='none',marker='+',color='b')
+	ax.set_yticks([-0.25,0,1,1.25])
+	ax.set_yticklabels(['Predicted','Actual','Predicted','Actual'])
 	ax.set_xlabel("Trials",fontsize=14)
-	ax.set_yticks([1,2])
-	ax.set_yticklabels(['Lower\npress','Upper\npress'])
-	for tick in ax.xaxis.get_major_ticks():
-		tick.label.set_fontsize(14)
-	for tick in ax.yaxis.get_major_ticks():
-		tick.label.set_fontsize(14)
-	ax.set_title("Model performance",fontsize=14)
-	ax.legend(bbox_to_anchor=(1,1))
-
-"""
-Plots data from sequential monte carlo simulation
-"""
-def plot_smc_hmm(e,actions,outcomes):
-	plt.plot(e[0,:])
-	x_lower = np.where(actions==0)[0]
-	x_upper = np.where(actions==1)[0]
-	upper_outcomes = outcomes[x_upper]
-	lower_outcomes = outcomes[x_lowet]
-	plt.plot(x_lower,lower_outcomes,color='b',marker='o',linestyle='none')
-	plt.plot(x_upper,upper_outcomes,color='r',marker='o',linestyle='none')
-
-
-
+	ax2.set_ylabel("Action values")
+	ax2.set_ylim(-2,2)
+	ax.set_title("Q-learning model fit",fontsize=14)
+	ax.text(10,0.35,"Log-liklihood:{0:.3f}".format(results['ll_RL']))
 
 """
 Plots the distributions of trial durations early to late, as well as overall
