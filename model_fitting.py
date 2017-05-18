@@ -12,6 +12,9 @@ import file_lists
 import os
 import pandas as pd
 import itertools
+import SMC as smc
+
+
 
 """
 A function to perform optimization on RL_models.
@@ -59,23 +62,6 @@ def fit_HMM_model(session_range):
 	results = brute(score_HMM_model,bounds,args=(actions,p_rewarded,
 		switch_after,b_a,b_b),Ns=20,disp=True)
 	return results
-
-
-	
-"""
-A function to do brute-force optimization.
-"""
-def brute_optimize(func,ranges,gridspace=100):
-	n_params = len(ranges)
-	##create the gridpoints by equal spacing in the given ranges
-	gridpoints = []
-	for i in range(n_params):
-		r = ranges[0]
-		gridpoints.append(np.linspace(r[0],r[1],gridspace))
-	##create a generator to return all combinations of possible param values
-	for combination in itertools.product(*gridpoints):
-		pass
-	
 
 
 """
@@ -158,6 +144,41 @@ def score_HMM_model(x,actions,p_rewarded,switch_after,b_a,b_b):
 		logL = log_liklihood(b_a,b_b,p_a,p_b)
 		results.append(-logL)
 	return np.nanmean(results)
+
+"""
+A function to get the action or outcome
+data from one session.
+Inputs:
+	-f_behavior: data file
+	-model_type: if RL, actions are reported;
+		if HMM, switches are reported
+Returns:
+	-actions: int array sequence of actions
+	-outcomes: int array sequence of outcomes
+	-switch_times: occurances of a block switch
+	-first_rewarded: the first block type
+"""
+def get_session_data(f_behavior,model_type='RL'):
+	meta = sa.get_session_meta(f_behavior)
+	n_trials = (meta['unrewarded']).size+(meta['rewarded']).size
+	actions = np.zeros(n_trials)
+	outcomes = np.zeros(n_trials)
+	switch_times = []
+	start = 0
+	for l in meta['block_lengths']:
+		switch_times.append(start+l)
+		start+=l
+	##last index is just the end of the trial, so we can ignore this
+	switch_times = np.asarray(switch_times)[:-1]
+	first_block = meta['first_block']
+	actions[meta['lower_lever']] = 1
+	actions[meta['upper_lever']] = 2
+	if model_type == 'HMM':
+		actions = smc.convert_actions_HMM(actions)
+	outcomes[meta['rewarded']] = 1
+	return actions,outcomes,switch_times,first_block
+
+
 
 """
 A function to get a sequence of switches

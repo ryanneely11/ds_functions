@@ -194,10 +194,13 @@ for f_behavior,f_ephys in zip(e_behavior,ephys_files):
 	behavior_id = f_behavior[-7:-5]
 	ephys_id = f_ephys[-8:-6]
 	assert behavior_id == ephys_id
-	f = h5py.File(f_behavior,'r')
-	f.close()
-	f = h5py.File(f_ephys,'r')
-	f.close()
+	try:
+		f = h5py.File(f_behavior,'r')
+		f.close()
+		f = h5py.File(f_ephys,'r')
+		f.close()
+	except OSError:
+		print("Warning: data file {} not detected".format(behavior_id))
 
 ### a function to get a dictionary of file paths split by animal.
 def split_behavior_by_animal():

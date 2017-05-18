@@ -3,149 +3,63 @@
 
 import numpy as np
 
+"""
+A function to initialize random parameters for the RL model
+"""
+def initp(n_particles):
+	p = np.random.randn(4,n_particles)+0.5
+	p[2,:] = np.random.rand(n_particles)+np.log(0.1)#eta
+	p[3,:] = np.random.rand(n_particles) #beta
+	return p
+"""
+A function to convert an array of action strings,
+ie 'upper_lever' into ints. In this case, upper = 2,
+lower = 1.
+Input:
+	action_names: list or array of action strings
+Returns:
+	actions: array where strings are converted to int codes
+"""
+def convert_actions_RL(action_names):
+	actions = np.zeros(len(action_names))
+	upper = np.where(action_names=='upper_lever')[0]
+	lower = np.where(action_names=='lower_lever')[0]
+	actions[upper] = 2
+	actions[lower] = 1
+	return actions
 
 """
-A class to implement a reinforcement learning
-agent, using the Rescorla-Wagner rule.
-Parameters (to be fitted):
-	-alpha: equivalence point between action values
-	-beta: the inverse temperature (explore/exploit param)
-	-eta: the learning rate
-	-bandit: a bandit class to interact with the agent
-	-actions: a list of actions to take (can be floats). 
-		 **restricted in this model to two total values**
+An update function based on the rescorla wagner rule. Simply 
+updates the action value of an action by the difference between
+the expected and actual reward, multiplied by alpha(the learning rate).
+Inputs:
+	-action: the action taken in this trial
+	-outcome: the outcome for the given action
+	-particles: the particle samples representing the PDF of
+		the hidden variables, where
+			-index[0,:] = action values for choice a
+			-index[1,:] = action values for choice b
+			-index[2,:] = alpha parameter (indecision point)
+			-index[3,:] = beta parameter (inverse temperature)
+			-index[4,:] = eta parameter (learning rate)
+Returns:
+	particle_next:
 """
-class RL_agent(object):
-	def __init__(self,bandit,actions,alpha,beta,eta):
-		self.alpha = alpha
-		self.beta = beta
-		self.eta = eta
-		self.bandit = bandit
-		self.actions = actions
-		self.log = {
-		'Qa':[0.5], ##action values of action a, updated each trial
-		'Qb':[0.5], ##action value of action b
-		'outcome':[0], ##reward history
-		'action':[actions[0]], ##action history
-		'p_switch':[0.5], ##switch probability for comparing to state-based model
-		'p_a':[0.5], ##probability of action a
-		'p_b':[0.5] ##probability of action b
-		}
+def rescorlawagner(action,reward,particles):
+	eta = np.exp(particles[2,:]) ##the particles representing the alpha var
+	particles[int(action-1),:] = particles[int(action-1),:]+eta*(
+		reward-particles[int(action-1),:])
+	return particles
 
-	##run one trial
-	def run(self):
-		##if this is the first trial, seed the initial action values
-		Qa_last = self.log['Qa'][-1] ##the last predicted action value
-		Qb_last = self.log['Qb'][-1]
-		reward_last = self.log['outcome'][-1]
-		action_last = self.log['action'][-1]
-		##we only update the action value of the action that we had experience 
-		##with on the last trial
-		if action_last == self.actions[0]: ##case where we should update Qa
-			d = self.get_delta(reward_last,Qa_last)
-			Qa_prior = self.predictQ(Qa_last,self.eta,d)
-			Qb_prior = Qb_last
-		elif action_last == self.actions[1]: ##case where we should update Qb
-			d = self.get_delta(reward_last,Qb_last)
-			Qa_prior = Qa_last
-			Qb_prior = self.predictQ(Qb_last,self.eta,d)
-		else:
-			raise ValueError
-			print("Unknown action type: {}".format(action_last))
-		##now we can predict what action we will take
-		Pa,action,p_switch = self.choose_action(Qa_prior,Qb_prior,self.beta,self.alpha)
-		##now feed this action into the bandit to get a reward
-		reward = self.bandit.run(action)
-		##finally, we can log all of the events from this action
-		self.log['Qa'].append(Qa_prior)
-		self.log['Qb'].append(Qb_prior)
-		self.log['outcome'].append(reward)
-		self.log['action'].append(action)
-		self.log['p_switch'].append(p_switch)
-		self.log['p_a'].append(Pa)
-		self.log['p_b'].append(1-Pa)
-
-
-	"""
-	A function to return an action value based on
-	the value of that action at the previous time-step,
-	some learning rate parameter, and a delta value, which
-	is the difference between expected and actual reward
-	Inputs:
-		Qpost: last estimate of action value
-		n: learning rate
-		delta: difference between expected and received reward
-			in the previous trial
-	Returns:
-		Qprior: predicted action value
-	"""
-	def predictQ(self,Qpost,eta,delta):
-		return Qpost + (eta*delta)
-
-	"""
-	A function to compute the difference between extected
-	and actual reward (delta)
-	Inputs:
-		r_actual: value of received reward
-		r_predicted: predicted reward value
-	Returns
-		delta (difference)
-	"""
-	def get_delta(self,r_actual,r_predicted):
-		return r_actual-r_predicted
-
-
-	"""
-	Compute the probability of choosing 
-	action a (Pa), then make a choice based on this probability.
-	Inputs:
-		Qa: value of choice a
-		Qb: value of choice b
-		beta: inverse temperature parameter
-		alpha: indecision point
-	Returns:
-		Pa, probability of action a
-		action: chosen action
-		p_switch: probability of switching actions
-	"""
-	def choose_action(self,Qa,Qb,beta,alpha):
-		##probability of choosing action a
-		Pa = self.luce_choice(beta*((Qa-Qb)-alpha))
-		p_switch = self.get_p_switch(Pa)
-		##probability of choosing either action
-		probs = [Pa,1-Pa]
-		return Pa,np.random.choice(self.actions,p=probs),p_switch
-
-	"""
-	A helper function to imlement the 
-	Luce Choice Rule.
-	Inputs:
-		z: value to use in computation
-	returns:
-		Pa: action probability
-	"""
-	def luce_choice(self,z):
-		return 1.0/(1+np.exp(-z))
-
-	"""
-	A function to determine the probability of switching actions,
-	given the probability of choosing action A.
-	Inputs:
-		Pa: probability of choosing action A
-	Returns:
-		p_switch: probability of switching actions
-	"""
-	def get_p_switch(self,Pa):
-		##determine what the last action was
-		if self.log['action'][-1] == self.actions[0]:
-			##case where the last action was action A
-			p_switch = 1-Pa ##probability of switchin is prob of action B
-		elif self.log['action'][-1] == self.actions[1]:
-			##case where last action was action B
-			p_switch = Pa
-		return p_switch
-
-
-
-
-
+"""
+An alternate form of action selection, that doesn't
+require an alpha equivalence point parameter.
+Inputs:
+	-action: the index of the action taken; 1 or 2
+	-particles: the probability distribution
+Returns:
+	Pa: probability of action a
+"""
+def boltzmann(action,particles):
+	beta = np.exp(particles[3,:])
+	return 1.0/(1+np.exp(-2.0*(action-1.5)*(beta*np.diff(particles[0:2,:],axis=0).squeeze())))
