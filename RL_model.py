@@ -11,6 +11,7 @@ def initp(n_particles):
 	p[2,:] = np.random.rand(n_particles)+np.log(0.1)#eta
 	p[3,:] = np.random.rand(n_particles) #beta
 	return p
+
 """
 A function to convert an array of action strings,
 ie 'upper_lever' into ints. In this case, upper = 2,
@@ -20,7 +21,7 @@ Input:
 Returns:
 	actions: array where strings are converted to int codes
 """
-def convert_actions_RL(action_names):
+def convert_actions(action_names):
 	actions = np.zeros(len(action_names))
 	upper = np.where(action_names=='upper_lever')[0]
 	lower = np.where(action_names=='lower_lever')[0]
@@ -63,3 +64,18 @@ Returns:
 def boltzmann(action,particles):
 	beta = np.exp(particles[3,:])
 	return 1.0/(1+np.exp(-2.0*(action-1.5)*(beta*np.diff(particles[0:2,:],axis=0).squeeze())))
+
+
+"""
+A function to take arrays of action values and fitted beta parameters
+at each times step and compute the array of corresponding actions.
+Inputs:
+	Qa: action values for action a
+	Qb: action values for action b
+	Beta: beta parameters
+Returns:
+	Pa: the computed probability of action a
+	actions: an int array of the actual actions taken
+"""
+def compute_actions(Qa,Qb,Beta):
+	pass
