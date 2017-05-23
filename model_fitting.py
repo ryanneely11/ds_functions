@@ -27,11 +27,11 @@ def fit_models(f_behavior):
 	##first parse the data from this session
 	actions,outcomes,switch_times,first_block = get_session_data(f_behavior)
 	##compute model fits. for RL model:
-	initp = rl.initp(1000)
+	initp = rl.initp(10000)
 	sd_jitter = [0.01,0.01,0.001,0.001]
 	e_RL,v_RL = smc.SMC(actions,outcomes,initp,sd_jitter,rl.rescorlawagner,rl.boltzmann)
 	##now for HMM
-	initp = hmm.initp(1000)
+	initp = hmm.initp(10000)
 	sd_jitter = [0.01,0.01,0.001,0.001,0.001]
 	e_HMM,v_HMM = smc.SMC(actions,outcomes,initp,sd_jitter,hmm.compute_belief,hmm.action_weights)
 	##now compute the actions that would be taken by each model

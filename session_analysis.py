@@ -15,6 +15,7 @@ from functools import reduce
 import dpca
 import os
 import pandas as pd
+import model_fitting as mf
 
 save_root = os.path.join(file_lists.save_loc,"LogisticRegression/80gauss_40ms_bins")
 
@@ -377,10 +378,10 @@ def get_session_meta(f_behavior,max_duration=5000):
 	metadata['block_lengths'] = trial_info['block_lengths']
 	metadata['first_block'] = data['context'][0]
 	metadata['mean_block_len'] = np.mean(trial_info['block_lengths'])
-	metadata['reward_rate'] = np.mean([len(trial_info['upper_correct_rewarded'])/(
-		len(trial_info['upper_correct_rewarded'])+len(trial_info['upper_correct_unrewarded'])),
-		len(trial_info['lower_correct_rewarded'])/(len(trial_info['lower_correct_rewarded'])+len(
-			trial_info['lower_correct_unrewarded']))])
+	# metadata['reward_rate'] = np.mean([len(trial_info['upper_correct_rewarded'])/(
+	# 	len(trial_info['upper_correct_rewarded'])+len(trial_info['upper_correct_unrewarded'])),
+	# 	len(trial_info['lower_correct_rewarded'])/(len(trial_info['lower_correct_rewarded'])+len(
+	# 		trial_info['lower_correct_unrewarded']))])
 	return metadata
 
 """

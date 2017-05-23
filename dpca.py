@@ -9,6 +9,7 @@ import collections
 from scipy import interpolate
 from scipy.stats import zscore
 import parse_trials as ptr
+import model_fitting as mf
 
 ###TODO: get datasets for everything, combined
 condition_pairs = {
@@ -76,6 +77,103 @@ def get_dataset(f_behavior,f_ephys,conditions,smooth_method='both',smooth_width=
 		X_c = None
 	return np.nan_to_num(X_c)
 
+
+"""
+A function to get 2 dPCA datasets: X_c, data from all trials in a session;
+and X_b; trials that fit some belief criteria based on a hidden markov model.
+Inputs:
+	f_behavior: file path to behavior data
+	f_ephys: file path to ephys data
+	conditions: should be two of the following: 'context', action', or 'outcome'. Can't be all three because
+		there is no such thing as a rewarded trial with upper lever contex and lower lever action.
+	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	pad: a window for pre- and post-trial padding, in ms. In other words, an x-ms period of time 
+		before lever press to consider the start of the trial, and an x-ms period of time after
+		reward to consider the end of the trial. For best results, should be a multiple of the bin size
+	z_score: if True, z-scores the array
+	trial_duration: specifies the trial length (in ms) to squeeze trials into. If None, the function uses
+		the median trial length over the trials in the file
+	min_rate: the min spike rate, in Hz, to accept. Units below this value will be removed.
+	max_duration: maximum allowable trial duration (ms)
+Returns:
+	X_c: data from individual trials: n-trials x n-neurons x condition-1, condition-2, ... x n-timebins.
+"""
+
+def get_dataset_hmm(f_behavior,f_ephys,conditions,smooth_method='both',smooth_width=[80,40],pad=[400,400],
+	trial_duration=None,max_duration=5000,min_rate=0.1,belief_range=(0,0.1)):
+	global condition_pairs
+	##the first step is to fit a hidden markov model to the data
+	fit_results = mf.fit_models(f_behavior)
+	##now get the info about belief states
+	b_a = fit_results['e_HMM'][0,:] ##belief in state corresponding to lower lever
+	b_b = fit_results['e_HMM'][1,:] ##belief in state corresponding to upper lever
+	##the belief strength is besically the magnitude of the difference between
+	##the belief in the two possible states
+	belief = abs(b_a-b_b)
+	belief_idx = np.where(np.logical_and(belief>=belief_range[0],
+		belief<=belief_range[1]))[0]
+	##get the spike dataset, and the trial info
+	X,trial_data = ptr.get_trial_spikes(f_behavior=f_behavior,f_ephys=f_ephys,smooth_method=smooth_method,
+		smooth_width=smooth_width,pad=pad,z_score=True,trial_duration=trial_duration,
+		max_duration=max_duration,min_rate=min_rate)
+	##get some metadata about this session
+	n_units = X.shape[1]
+	n_bins = X.shape[2]
+	# if balance: 
+	# 	trial_index,n_trials = balance_trials(trial_data,conditions)
+	# else:
+	trial_index,n_trials = unbalance_trials(trial_data,conditions) ##because of limited trial number we will unbalance
+	trial_types = list(trial_index)
+	##allocate space for the dataset
+	if n_trials > 0:
+		X_c = np.empty((n_trials,n_units,len(condition_pairs[conditions[0]]),
+			len(condition_pairs[conditions[1]]),n_bins))
+		X_c[:] = np.nan
+		for t in trial_index.keys():
+			##based on the key, figure out where these trials should be placed in the dataset
+			##I **think** that we should always expect the context[0] trial type to be the first part of the string
+			c1_type = t[:t.index('+')]
+			c2_type = t[t.index('+')+1:]
+			c1_idx = condition_pairs[conditions[0]].index(c1_type)
+			c2_idx = condition_pairs[conditions[1]].index(c2_type)
+			##now add the data to the dataset using these indices
+			for i,j in enumerate(trial_index[t]):
+				X_c[i,:,c1_idx,c2_idx,:] = X[j,:,:]
+		X_c = np.nan_to_num(X_c)
+	else:
+		X_c = np.empty([])
+	##now repeat for the HMM-defined trials
+	X = X[belief_idx]
+	trial_data = trial_data.loc[belief_idx].reset_index(drop=True)
+	##get some metadata about this session
+	n_units = X.shape[1]
+	n_bins = X.shape[2]
+	# if balance: 
+	# 	trial_index,n_trials = balance_trials(trial_data,conditions)
+	# else:
+	trial_index,n_trials = unbalance_trials(trial_data,conditions) ##because of limited trial number we will unbalance
+	trial_types = list(trial_index)
+	##allocate space for the dataset
+	if n_trials > 0:
+		X_b = np.empty((n_trials,n_units,len(condition_pairs[conditions[0]]),
+			len(condition_pairs[conditions[1]]),n_bins))
+		X_b[:] = np.nan
+		for t in trial_index.keys():
+			##based on the key, figure out where these trials should be placed in the dataset
+			##I **think** that we should always expect the context[0] trial type to be the first part of the string
+			c1_type = t[:t.index('+')]
+			c2_type = t[t.index('+')+1:]
+			c1_idx = condition_pairs[conditions[0]].index(c1_type)
+			c2_idx = condition_pairs[conditions[1]].index(c2_type)
+			##now add the data to the dataset using these indices
+			for i,j in enumerate(trial_index[t]):
+				X_b[i,:,c1_idx,c2_idx,:] = X[j,:,:]
+		X_b = np.nan_to_num(X_b)
+	else:
+		X_b = np.empty([])
+	return X_c,X_b
 """
 A multiprocessing implementation of get_dataset()
 """
@@ -97,32 +195,12 @@ def get_dataset_mp(args):
 	X_c = get_dataset(f_behavior,f_ephys,conditions,smooth_method=smooth_method,smooth_width=smooth_width,
 		pad=pad,z_score=z_score,trial_duration=trial_duration,max_duration=max_duration,min_rate=min_rate,
 		balance=balance)
-	return X_c,f_behavior
+	return X_c
 
 """
-A function to return the data from trials after a context switch, as well as data
-	from all other trials. Makes sure that data is paired so you can fit/transform on one
-	model. Optimized for multiprocessing.
-Inputs:
-	f_behavior: file path to behavior data
-	f_ephys: file path to ephys data
-	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
-	smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
-		with index 0 being the gaussian width and index 1 being the bin width
-	pad: a window for pre- and post-trial padding, in ms. In other words, an x-ms period of time 
-		before lever press to consider the start of the trial, and an x-ms period of time after
-		reward to consider the end of the trial. For best results, should be a multiple of the bin size
-	z_score: if True, z-scores the array
-	trial_duration: specifies the trial length (in ms) to squeeze trials into. If None, the function uses
-		the median trial length over the trials in the file
-	min_rate: the min spike rate, in Hz, to accept. Units below this value will be removed.
-	max_duration: maximum allowable trial duration (ms)
-	n_after: the number of trials after a context switch to include in a dataset
-
-Returns:
-	X_c: data from individual trials: n-trials x n-neurons x condition-1, condition-2, ... x n-timebins.
+A multiprocessing implementation of get_dataset_hmm()
 """
-def get_switch_and_data_mp(args):
+def get_hmm_mp(args):
 	##parse args
 	f_behavior = args[0]
 	f_ephys = args[1]
@@ -130,71 +208,15 @@ def get_switch_and_data_mp(args):
 	smooth_method = args[3]
 	smooth_width = args[4]
 	pad = args[5]
-	z_score = args[6]
-	trial_duration = args[7]
-	max_duration = args[8]
-	min_rate = args[9]
-	balance = args[10]
-	n_after = args[11]
-	##get the spike dataset, and the trial info
-	X,trial_data = ptr.get_trial_spikes(f_behavior=f_behavior,f_ephys=f_ephys,smooth_method=smooth_method,
-		smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=trial_duration,
-		max_duration=max_duration,min_rate=min_rate)
-	##find the indices where there is a context switch
-	switch_trials = get_switch_index(trial_data,n_after)
-	X1 = X[switch_trials,:,:]
-	trial_data1 = trial_data.loc[switch_trials]
-	trial_data1.index = np.arange(len(trial_data1.index))
-	#some metadata	
-	n_units = X1.shape[1]
-	n_bins = X1.shape[2]
-	if balance:
-		trial_index,n_trials = balance_trials(trial_data1,conditions)
-	else:
-		trial_index,n_trials = unbalance_trials(trial_data1,conditions)
-	trial_types = list(trial_index)
-	##allocate space for the dataset
-	if n_trials > 0:
-		X_s = np.empty((n_trials,n_units,len(condition_pairs[conditions[0]]),
-			len(condition_pairs[conditions[1]]),n_bins))
-		X_s[:] = np.nan
-		for t in trial_index.keys():
-			##based on the key, figure out where these trials should be placed in the dataset
-			##I **think** that we should always expect the context[0] trial type to be the first part of the string
-			c1_type = t[:t.index('+')]
-			c2_type = t[t.index('+')+1:]
-			c1_idx = condition_pairs[conditions[0]].index(c1_type)
-			c2_idx = condition_pairs[conditions[1]].index(c2_type)
-			##now add the data to the dataset using these indices
-			for i,j in enumerate(trial_index[t]):
-				X_s[i,:,c1_idx,c2_idx,:] = X1[j,:,:]
-		##now repeat for all trials
-		##get some metadata about this session
-		n_units = X.shape[1]
-		n_bins = X.shape[2]
-		if balance:
-			trial_index,n_trials = balance_trials(trial_data,conditions)
-		else:
-			trial_index,n_trials = unbalance_trials(trial_data,conditions)
-		trial_types = list(trial_index)
-		##allocate space for the dataset
-		X_c = np.empty((n_trials,n_units,len(condition_pairs[conditions[0]]),
-			len(condition_pairs[conditions[1]]),n_bins))
-		X_c[:] = np.nan
-		for t in trial_index.keys():
-			##based on the key, figure out where these trials should be placed in the dataset
-			##I **think** that we should always expect the context[0] trial type to be the first part of the string
-			c1_type = t[:t.index('+')]
-			c2_type = t[t.index('+')+1:]
-			c1_idx = condition_pairs[conditions[0]].index(c1_type)
-			c2_idx = condition_pairs[conditions[1]].index(c2_type)
-			##now add the data to the dataset using these indices
-			for i,j in enumerate(trial_index[t]):
-				X_c[i,:,c1_idx,c2_idx,:] = X[j,:,:]
-	else:
-		X_s = None; X_c = None
-	return np.nan_to_num(X_c), np.nan_to_num(X_s)
-
+	trial_duration = args[6]
+	max_duration = args[7]
+	min_rate = args[8]
+	belief_range = args[9]
+	current_file = f_behavior[-11:-5]
+	print("Adding data from file "+current_file)
+	X_c,X_b = get_dataset_hmm(f_behavior,f_ephys,conditions,smooth_method=smooth_method,smooth_width=smooth_width,
+		pad=pad,trial_duration=trial_duration,max_duration=max_duration,min_rate=min_rate,belief_range=belief_range)
+	return X_c,X_b
 """
 This function actually runs dpca, relying on some globals for 
 the details. ***NOTE: there are some hard-to-avoid elements here that are

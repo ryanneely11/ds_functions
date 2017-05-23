@@ -639,7 +639,7 @@ the appropriate format.
 Inputs:
 	f_behavior: a hdf5 file path to where the raw behavior data is stored.
 """
-def plot_trials(f_behavior):
+def plot_trials(f_behavior,save=False):
 	results = pt.get_event_data(f_behavior)
 	##we will split this data a little further, into
 	##different catagories.
@@ -694,9 +694,130 @@ def plot_trials(f_behavior):
 	ax.legend(bbox_to_anchor=(1,1))
 
 """
+Plots model fits over days, comparing HMM and RL
+"""
+def plot_model_fits(save=False):
+	RL_fits, HMM_fits = fa.model_fits()
+	##add a break in the data to acocunt for surgeries
+	surgery_break = np.zeros((RL_fits.shape[0],4))
+	surgery_break[:] = np.nan
+	pre_surgery_RL = RL_fits[:,0:8]
+	post_surgery_RL = RL_fits[:,8:]
+	pre_surgery_HMM = HMM_fits[:,0:8]
+	post_surgery_HMM = HMM_fits[:,8:]
+	RL = np.concatenate((pre_surgery_RL,surgery_break,post_surgery_RL),axis=1)
+	HMM = np.concatenate((pre_surgery_HMM,surgery_break,post_surgery_HMM),axis=1)
+	"""
+	Start with the plot for RL
+	"""
+	data = RL
+	##get the mean and std error
+	mean = np.nanmean(RL,axis=0)
+	err = np.nanstd(RL,axis=0)/np.sqrt(RL.shape[0])
+	##the x-axis
+	x = np.arange(1,data.shape[1]+1)
+	##set up the plot
+	fig,(ax,ax2) = plt.subplots(nrows=1,ncols=2,sharey=True)
+	ax.errorbar(x,mean,linewidth=2,color='b',yerr=err,capthick=2)
+	##also plot animals individually
+	for i in range(data.shape[0]):
+		ax.plot(x,data[i,:],color='b',linewidth=2,alpha=0.3)
+	for tick in ax.xaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	for tick in ax.yaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	ax.set_xlabel("Training day",fontsize=14)
+	ax.set_ylabel("Log-liklihood",fontsize=14)
+	ax.set_title("Goodness-of-fit for\nRL models",fontsize=14)
+	ax.text(8,ax.get_ylim()[0]+0.05,"Implant\nsurgery",fontsize=14,color='r')
+	ax.plot(np.arange(8,13),np.ones(5)*ax.get_ylim()[0]+0.02,linewidth=4,color='r')
+	##now compare first 3 and last 3 days
+	first3 = data[:,0:4].mean(axis=1)
+	last3 = data[:,-6:-2].mean(axis=1) ##I think one animal didn't do as many days
+	means = np.array([first3.mean(),last3.mean()])
+	sems = np.array([stats.sem(first3),stats.sem(last3)])
+	#####
+	x = np.array([1,2])
+	xerr = np.ones(2)*0.1
+	for i in range(first3.size):
+		ax2.plot(x[0],first3[i],color='cyan',linewidth=2,marker='o',alpha=0.5)
+		ax2.plot(x[1],last3[i],color='blue',linewidth=2,marker='o',alpha=0.5)
+	ax2.errorbar(x,means,yerr=sems,xerr=xerr,fmt='none',ecolor='k',capthick=2,elinewidth=2)
+	plt.xticks(x,['first 4','last 4'])
+	for ticklabel in ax2.get_xticklabels():
+		ticklabel.set_fontsize(14)
+	for ticklabel in ax2.get_yticklabels():
+		ticklabel.set_fontsize(14)
+	ax2.set_xlabel("Training day",fontsize=14)
+	ax2.set_title("Comparison eary-late",fontsize=14)
+	tval,pval = stats.ttest_rel(first3,last3)
+	ax2.text(1.5,0.42,"p={0:.4f}".format(pval))
+	print("mean first 4="+str(first3.mean()))
+	print("mean last 4="+str(last3.mean()))
+	print("pval="+str(pval))
+	print("tval="+str(tval))
+	plt.tight_layout()
+	if save:
+		fig.savefig(r"D:\Ryan\DS_animals\plots\RL_fits.png")
+		fig.savefig(r"D:\Ryan\DS_animals\plots\RL_fits.svg")
+	"""
+	Now do the plot for HMM
+	"""
+	data = HMM
+	##get the mean and std error
+	mean = np.nanmean(HMM,axis=0)
+	err = np.nanstd(HMM,axis=0)/np.sqrt(HMM.shape[0])
+	##the x-axis
+	x = np.arange(1,data.shape[1]+1)
+	##set up the plot
+	fig,(ax,ax2) = plt.subplots(nrows=1,ncols=2,sharey=True)
+	ax.errorbar(x,mean,linewidth=2,color='g',yerr=err,capthick=2)
+	##also plot animals individually
+	for i in range(data.shape[0]):
+		ax.plot(x,data[i,:],color='g',linewidth=2,alpha=0.3)
+	for tick in ax.xaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	for tick in ax.yaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	ax.set_xlabel("Training day",fontsize=14)
+	ax.set_ylabel("Log-liklihood",fontsize=14)
+	ax.set_title("Goodness-of-fit for\nHidden Markov Models",fontsize=14)
+	ax.text(8,ax.get_ylim()[0]+0.05,"Implant\nsurgery",fontsize=14,color='r')
+	ax.plot(np.arange(8,13),np.ones(5)*ax.get_ylim()[0]+0.02,linewidth=4,color='r')
+	##now compare first 3 and last 3 days
+	first3 = data[:,0:4].mean(axis=1)
+	last3 = data[:,-6:-2].mean(axis=1) ##I think one animal didn't do as many days
+	means = np.array([first3.mean(),last3.mean()])
+	sems = np.array([stats.sem(first3),stats.sem(last3)])
+	#####
+	x = np.array([1,2])
+	xerr = np.ones(2)*0.1
+	for i in range(first3.size):
+		ax2.plot(x[0],first3[i],color='lightgreen',linewidth=2,marker='o',alpha=0.5)
+		ax2.plot(x[1],last3[i],color='green',linewidth=2,marker='o',alpha=0.5)
+	ax2.errorbar(x,means,yerr=sems,xerr=xerr,fmt='none',ecolor='k',capthick=2,elinewidth=2)
+	plt.xticks(x,['first 4','last 4'])
+	for ticklabel in ax2.get_xticklabels():
+		ticklabel.set_fontsize(14)
+	for ticklabel in ax2.get_yticklabels():
+		ticklabel.set_fontsize(14)
+	ax2.set_xlabel("Training day",fontsize=14)
+	ax2.set_title("Comparison eary-late",fontsize=14)
+	tval,pval = stats.ttest_rel(first3,last3)
+	ax2.text(1.5,0.42,"p={0:.4f}".format(pval))
+	print("mean first 4="+str(first3.mean()))
+	print("mean last 4="+str(last3.mean()))
+	print("pval="+str(pval))
+	print("tval="+str(tval))
+	plt.tight_layout()
+	if save:
+		fig.savefig(r"D:\Ryan\DS_animals\plots\HMM_fits.png")
+		fig.savefig(r"D:\Ryan\DS_animals\plots\HMM_fits.svg")
+
+"""
 plots trial data from a model
 """
-def plot_model_fits(f_behavior):
+def plot_single_model_fit(f_behavior):
 	##get the model fits
 	results = mf.fit_models(f_behavior)
 	actions = results['actions']

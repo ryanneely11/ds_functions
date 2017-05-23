@@ -17,6 +17,33 @@ import pandas as pd
 import multiprocessing as mp
 import log_regression3 as lr3
 import log_regression2 as lr2
+import model_fitting as mf
+
+"""
+Model fitting: this function fits an HMM model and an RL model to each behavioral
+training session, and plots the goodness-of-fit for each model type over time for 
+all animals.
+Inputs:
+	None
+Returns:
+	-RL_fits: log-liklihood across sessions for each animal; animals x sessions 
+	-HMM_fits: ll across sessions for each animal 
+"""
+def model_fits():
+	files_by_animal = file_lists.split_behavior_by_animal()
+	n_sessions = max([len(x) for x in files_by_animal.values()])-6 ##first 6 sessions only have 1 lever
+	n_animals = len(list(files_by_animal))
+	HMM_fits = np.zeros((n_animals,n_sessions))
+	RL_fits = np.zeros((n_animals,n_sessions))
+	HMM_fits[:] = np.nan
+	RL_fits[:] = np.nan
+	for n,animal in enumerate(file_lists.animals):
+		sessions = files_by_animal[animal][6:] ##first 6 sessions only have 1 lever
+		for m, f_behavior in enumerate(sessions):
+			results = mf.fit_models(f_behavior)
+			HMM_fits[n,m] = results['ll_HMM']
+			RL_fits[n,m] = results['ll_RL']
+	return RL_fits,HMM_fits
 
 
 
@@ -243,7 +270,7 @@ def get_dpca_dataset(conditions,smooth_method='both',smooth_width=[80,40],pad=[4
 	pool.join()
 	results = async_result.get()
 	for i in range(len(results)):
-		if results[i] != None:
+		if results[i].size > 1:
 			X_all.append(results[i])
 	##now, get an idea of how many trials we have per dataset
 	n_trials = [] ##keep track of how many trials are in each session
@@ -256,11 +283,76 @@ def get_dpca_dataset(conditions,smooth_method='both',smooth_width=[80,40],pad=[4
 	##from this set, what is the minimum number of trials?
 	print("Including {0!s} sessions out of {1!s}".format(len(include),len(X_all)))
 	min_trials = min(n_trials)
-	##now all we have to do is concatenate everything together!
+	#now all we have to do is concatenate everything together!
 	X_c = []
 	for s in include:
 		X_c.append(X_all[s][0:min_trials,:,:,:,:])
 	return np.concatenate(X_c,axis=1)
+	return X_c
+
+"""
+A function to get a dpca dataset, but only include trials that fit a certain belief
+state criteria as defined by a hidden markov model fitted to the behavioral data.
+Inputs:
+	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	pad: a window for pre- and post-trial padding, in ms. In other words, an x-ms period of time 
+		before lever press to consider the start of the trial, and an x-ms period of time after
+		reward to consider the end of the trial
+	balance_trials: if True, equates the number of trials across all conditions by removal
+	min_trials: minimum number of trials required for each trial type. If a session doesn't meet 
+		this criteria, it will be excluded.
+	belief_range: the range of belief strengths to accept
+Returns:
+	X_c: data from individual trials;
+		 shape n-trials x n-neurons x condition-1 x condition-2, ... x n-timebins
+"""
+def get_dpca_dataset_hmm(conditions,smooth_method='both',smooth_width=[80,40],pad=[400,400],
+	max_duration=5000,min_rate=0.1,balance=True,min_trials=15,belief_range=(0,0.1)):
+	##a container to store all of the X_trials data
+	X_all_c = []
+	X_all_b = []
+	##the first step is to determine the median trial length for all sessions
+	med_duration = np.median(get_trial_durations(max_duration=max_duration,session_range=None)).astype(int)
+	arglist = [[f_behavior,f_ephys,conditions,smooth_method,smooth_width,pad,med_duration,
+				max_duration,min_rate,belief_range] for f_behavior,f_ephys in zip(file_lists.e_behavior,
+					file_lists.ephys_files)]
+	##assign data collection to multiple processes
+	pool = mp.Pool(processes=8)
+	async_result = pool.map_async(dpca.get_hmm_mp,arglist)
+	pool.close()
+	pool.join()
+	results = async_result.get()
+	for i in range(len(results)):
+		if results[i][0].size > 1 and results[i][1].size > 1:
+			X_all_c.append(results[i][0])
+			X_all_b.append(results[i][1])
+	assert len(X_all_c) == len(X_all_b)
+	##now, get an idea of how many trials we have per dataset
+	n_trials_c = [] ##keep track of how many trials are in each session
+	n_trials_b = []
+	include = [] ##keep track of which sessions have more then the min number of trials
+	for i in range(len(X_all_c)):
+		nc = X_all_c[i].shape[0]
+		nb = X_all_b[i].shape[0]
+		if nc >= min_trials and nb >= min_trials:
+			include.append(i)
+			n_trials_c.append(nc)
+			n_trials_b.append(nb)
+	##from this set, what is the minimum number of trials?
+	print("Including {0!s} sessions out of {1!s}".format(len(include),len(X_all_c)))
+	min_trials_c = min(n_trials_c)
+	min_trials_b = min(n_trials_b)
+	#now all we have to do is concatenate everything together!
+	X_c = []
+	X_b = []
+	for s in include:
+		X_c.append(X_all_c[s][0:min_trials_c,:,:,:,:])
+		X_b.append(X_all_b[s][0:min_trials_b,:,:,:,:])
+	X_c = np.concatenate(X_c,axis=1)
+	X_b = np.concatenate(X_b,axis=1)
+	return X_c, X_b
 
 """
 A very similar function to get_dpca_dataset, but just returns data from all the sessions
