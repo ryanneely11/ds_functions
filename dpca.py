@@ -243,9 +243,46 @@ def run_dpca(X_trials,n_components,conditions):
 	##Next, get the variance explained:
 	var_explained = dpca.explained_variance_ratio_
 	##finally, get the significance masks (places where the demixed components are significant)
-	sig_masks = dpca.significance_analysis(np.nanmean(X_trials,axis=0),X_trials,axis='t',
-		n_shuffles=100,n_splits=3,n_consecutive=2)
-	return Z,var_explained,sig_masks
+	# sig_masks = dpca.significance_analysis(np.nanmean(X_trials,axis=0),X_trials,axis='t',
+	# 	n_shuffles=100,n_splits=3,n_consecutive=2)
+	return Z,var_explained #,sig_masks
+
+"""
+A function to fit dpca using one dataset, and then use that
+fit to transform a second dataset. 
+Inputs:
+	-X_trials1: dataset to use for initial fit
+	-X_trials2: dataset to transform
+	-n_components: number of components to use
+	-conditions: conditions list
+Returns:
+	Z1, Z2: transformed marginalizations
+	var_explained
+"""
+def fit_dpca_two(X_trials1,X_trials2,n_components,conditions):
+	##create labels from the first letter of the conditions
+	##***this might not work if the implementation changes***
+	labels = conditions[0][0]+conditions[1][0]+'t'
+	#create a dictionary argument that joins the time- and condition-dependent components
+	join = {}
+	for l in labels[:-1]:
+		join[l+'t'] = [l,l+'t']
+	join[labels[0]+labels[1]+'t'] = [labels[0]+labels[1],labels[0]+labels[1]+'t']
+	##initialize the dpca object
+	dpca = dPCA.dPCA(labels=labels,join=join,n_components=n_components,
+		regularizer='auto')
+	dpca.protect = ['t']
+	##now fit dPCA with the first dataset
+	dpca.fit(np.nanmean(X_trials1,axis=0),trialX=X_trials1)
+	##now transform both datasets using this fit
+	Z1 = dpca.transform(np.nanmean(X_trials1,axis=0))
+	var_explained1 = dpca.explained_variance_ratio_
+	Z2 = dpca.transform(np.nanmean(X_trials2,axis=0))
+	var_explained2 = dpca.explained_variance_ratio_
+	return Z1,Z2,var_explained1,var_explained2
+
+
+
 
 """
 Multiprocess implementation of run_dpca

@@ -182,13 +182,13 @@ def plot_log_units_all2(dir_list=None,session_range=None,sig_level=0.05,test_typ
 """
 A function to plot logistic regression data for all sessions.
 """
-def plot_log_units_all(dir_list=None,session_range=None,sig_level=0.05,test_type='llr_pval'):
+def plot_log_units_all(dir_list=None,session_range=None,sig_level=0.05,test_type='llr_pvals'):
 	##coding this in just to save time
 	if dir_list == None:
 		dir_list = [
-		"/Volumes/Untitled/Ryan/DS_animals/results/LogisticRegression/50ms_bins_0.05/S1",
-		"/Volumes/Untitled/Ryan/DS_animals/results/LogisticRegression/50ms_bins_0.05/S2",
-		"/Volumes/Untitled/Ryan/DS_animals/results/LogisticRegression/50ms_bins_0.05/S3"
+		r"D:\Ryan\DS_animals\results\LogisticRegression\80gauss_40ms_bins\S1",
+		r"D:\Ryan\DS_animals\results\LogisticRegression\80gauss_40ms_bins\S2",
+		r"D:\Ryan\DS_animals\results\LogisticRegression\80gauss_40ms_bins\S3"
 		]
 	##get the data
 	results = fa.analyze_log_regressions(dir_list,session_range=session_range,sig_level=sig_level,
@@ -240,10 +240,10 @@ def plot_log_units_all(dir_list=None,session_range=None,sig_level=0.05,test_type
 		ax.set_xticklabels([])
 		ax.set_yticklabels([])
 		##plot the actual data
-		cplots.append(ax.imshow(img_mat,interpolation='none',cmap='summer'))
-		for j in range(n_units):
-			r,c = rc_idx(j,side_len)
-			ax.text(r,c,str(j+1),fontsize=4)
+		cplots.append(ax.imshow(img_mat,interpolation='none',cmap='YlOrRd'))
+		# for j in range(n_units):
+		# 	r,c = rc_idx(j,side_len)
+		# 	ax.text(r,c,str(j+1),fontsize=4)
 	##rescale all plots to the same range
 	for cp in cplots:
 		cp.set_clim(vmin=vmin,vmax=vmax)
@@ -1419,7 +1419,7 @@ Inputs:
 	Z: transformed spike matrix (output from dpca.session_dpca)
 	time: time axis (output from dpca.session_dpca)
 """
-def plot_dpca_results(Z,var_explained,sig_masks,conditions,bin_size,pad=None,n_components=3):	
+def plot_dpca_results(Z,var_explained,conditions,bin_size,pad=None,n_components=3):	
 	##set up the figure
 	fig = plt.figure()
 	##add time and interaction as a conditions
@@ -1449,13 +1449,13 @@ def plot_dpca_results(Z,var_explained,sig_masks,conditions,bin_size,pad=None,n_c
 				label=dpca.condition_pairs[conditions[1]][1]+",\n"+dpca.condition_pairs[conditions[2]][1],
 			linestyle='dashed')
 			##now get the significance masks (unless there isn't one, like for time)
-			try:
-				mask = sig_masks[c_idx[c]][p]
-				sigx = np.where(mask==True)[0]
-				sigy = np.ones(sigx.size)*ax.get_ylim()[0]
-				ax.plot(sigx,sigy,color='k',linewidth=2)
-			except KeyError:
-				pass
+			# try:
+			# 	mask = sig_masks[c_idx[c]][p]
+			# 	sigx = np.where(mask==True)[0]
+			# 	sigy = np.ones(sigx.size)*ax.get_ylim()[0]
+			# 	ax.plot(sigx,sigy,color='k',linewidth=2)
+			# except KeyError:
+			# 	pass
 			##now plot the lines corresponding to the events, if requested
 			if pad is not None:
 				plt.vlines(np.array([pad[0],time.max()-pad[1]]),ax.get_ylim()[0],ax.get_ylim()[1],
@@ -1469,13 +1469,16 @@ def plot_dpca_results(Z,var_explained,sig_masks,conditions,bin_size,pad=None,n_c
 				ax.set_xticklabels([])
 			if p == 0:
 				ax.set_ylabel(condition,fontsize=14)
-			for tick in ax.yaxis.get_major_ticks():
-				tick.label.set_fontsize(14)
+				for tick in ax.yaxis.get_major_ticks():
+					tick.label.set_fontsize(14)
+			else:
+				ax.set_yticklabels([])
 			ax.locator_params(axis='y',tight=True,nbins=4)
 			if c == 0:
 				ax.set_title("Component "+str(p),fontsize=14)
 			axes.append(ax)
-	axes[2].legend(bbox_to_anchor=(1,1))
+			ax.set_ylim(-5.5,7.5)
+	axes[n_components-1].legend(bbox_to_anchor=(1,1))
 	##now do a second plot that shows the variance explained by the combination
 	##of all components
 	fig,ax = plt.subplots(1)
@@ -1493,6 +1496,15 @@ def plot_dpca_results(Z,var_explained,sig_masks,conditions,bin_size,pad=None,n_c
 		tick.label.set_fontsize(14)
 	ax.set_xlim(0,all_var.size+2)
 	ax.set_ylim(0,100)
+	##do a third plot that shows the breakdown of variance explained in 
+	##a pie chart
+	sizes = np.zeros(len(c_idx))
+	for n,i in enumerate(c_idx):
+		sizes[n] = sum(var_explained[i])
+	sizes = sizes/sizes.sum()
+	fig,ax = plt.subplots()
+	ax.pie(sizes,labels=conditions,autopct='%1.1f%%',startangle=90)
+	ax.axis('equal')
 	plt.show()
 
 	
