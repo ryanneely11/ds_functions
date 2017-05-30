@@ -1536,8 +1536,8 @@ def plot_dpca_results(Z,var_explained,conditions,bin_size,pad=None,n_components=
 		(-1,1).
 	"""
 def plot_tensors(factors,trial_data,n_factors=4,plots=['bar','line','scatter'],ylim='link',
-				 yticks=True,width_ratios=None,scatter_kw=dict(),line_kw=dict(),bar_kw=dict(),
-				 titles=['Estimated\nneuron factors', 'Estimated\ntime factors', 'Estimated\ntrial factors']):
+	yticks=True,width_ratios=None,scatter_kw=dict(),line_kw=dict(),bar_kw=dict(),
+	titles=['Estimated\nneuron factors', 'Estimated\ntime factors', 'Estimated\ntrial factors']):
 	
 	trial_info = ptr.parse_trial_data(trial_data)
 	factors, ndim, rank = _validate_factors(factors)

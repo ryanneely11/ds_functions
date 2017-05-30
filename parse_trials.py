@@ -207,8 +207,47 @@ def get_trial_spikes(f_behavior,f_ephys,smooth_method='both',smooth_width=[80,40
 		X_trials = dpca.zscore_across_trials(X_trials)
 	return X_trials,trial_data
 
+"""
+A function to get lfp segments occurring during individual trials
+Inputs:	
+	f_behavior: file path to behavior data
+	f_ephys: file path to ephys data
+	pad: a window for pre- and post-trial padding, in ms. In other words, an x-ms period of time 
+		before lever press to consider the start of the trial, and an x-ms period of time after
+		reward to consider the end of the trial. For best results, should be a multiple of the bin size
+	trial_duration: specifies the trial length (in ms) to squeeze trials into. If None, the function uses
+		the median trial length over the trials in the file
+	max_duration: maximum allowable trial duration (ms)
+Returns:
+	X: processed lfp data in the shape trials x units x ms
+	trial_data: pandas datafame with info about the individual trials
+"""
+def get_trial_lfp(f_behavior,f_ephys,pad,trial_duration,max_duration):
+	##get the trial timestamps
+	trial_data = get_full_trials(f_behavior,pad=pad,max_duration=max_duration)
+	##get the raw LFP data
+	X_raw = pe.get_lfp_data(f_ephys)
+	##generate the data windows
+	windows = np.zeros((len(trial_data.index),2))
+	windows[:,0] = trial_data['start_ts']
+	windows[:,1] = trial_data['end_ts']
+	windows.astype(int)
+	##get the LFP data windows. The output of this is a LIST
+	X_trials = pe.X_windows(X_raw,windows)
+	##now we can work on equating all the trial lengths
+	##if no specific trial length is requested, just use the median trial dur
+	if trial_duration is None:
+		trial_duration = np.median(windows[:,1]-windows[:,0])
+	##now get this number as an integer
+	##keep in mind, this is meant to be the duration of the 
+	##period between action and outcome, which is NOT the full trial duration
+	##if pad != [0,0]. Data in the pre-and post-intervals will not be interpolated
+	trial_duration = np.ceil(trial_duration).astype(int)
+	ts_rel = get_ts_rel(trial_data)
+	##now we can stretch/squeeze all of the trials to be the same length
+	X_trials = dpca.stretch_trials(X_trials,ts_rel,trial_duration)
+	return X_trials,trial_data
 
-	
 """
 A function to look at the behavior around reversals.
 Inputs:

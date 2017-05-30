@@ -43,18 +43,35 @@ def get_spike_data(f_in,smooth_method='bins',smooth_width=50,z_score=False):
 			X[a,:] = zscore(X[a,:])
 	return X
 
-def get_lfp_data(f_in,smooth_method='bins',smooth_width=50,z_score=False):
+"""
+A function to return an lfp data matrix from
+a single recording session, of dims channels x bins
+Inputs:
+	f_in: data file to get lfp from
+Returns:
+	X: lfp data matrix in size channles x ms 
+"""
+def get_lfp_data(f_in):
 	f = h5py.File(f_in,'r')
 	#get the list of lfp channels in the file
-	ad_chans = [x for x in f.keys() if x.startswith('AD') and not x.endswith('_ts')]
+	ad_data = [x for x in f.keys() if x.startswith('AD') and not x.endswith('_ts')]
+	ad_ts = [x for x in f.keys() if x.endswith('_ts')]
 	##make sure all the AD channels have the same duration
-	durs = np.asarray([f[x].size for x in ad_chans])
+	durs = np.asarray([f[x].size for x in ad_data])
 	assert np.all(durs==durs[0])
-	L = np.zeros((len(ad_chans),durs[0]))
+	L = np.zeros((len(ad_data),durs[0]))
 	##add the data to the list of arrays 
-	for n,u in enumerate(ad_chans):
-		##do the binary transform (ie 1 ms bins)
-		L[n,:] = np.asarray(f[u])
+	for i in range(len(ad_ts)):
+		ts = np.asarray(f[ad_ts[i]])
+		raw_ad = np.asarray(f[ad_ts[i]]) 
+		#convert the ad ts to samples, and integers for indexing
+		ts = np.ceil((ts*1000)).astype(int)
+		##account for any gaps caused by pausing the plexon session ****IMPORTANT STEP****	
+		## The LFP signal may have fewer points than "duration" if 
+		##the session was paused, so we need to account for this
+		full_ad = np.zeros(durs[0])
+		full_ad[ts] = raw_ad
+		L[i,:] = full_ad
 	f.close()
 	return L
 
