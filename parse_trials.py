@@ -135,6 +135,30 @@ def get_event_spikes(f_behavior,f_ephys,event_name,window=[400,0],
 	return X_trials
 
 """
+A function to get windowed data around a particular type of event
+Inputs:
+	-f_behavior: path to behavior data file
+	-f_ephys: path to ephys data file
+	-event_name: string corresponding to the event type to time lock to
+	-window [pre_event, post_event] window, in ms
+Returns:
+	-X data array in shape n_units x n_trials x b_bins
+"""
+def get_event_lfp(f_behavior,f_ephys,event_name,window=[400,0]):
+	##start by getting the parsing the behavior timestamps
+	ts = pt.get_event_data(f_behavior)[event_name]
+	##get the spike data for the full session
+	X_raw = pe.get_lfp_data(f_ephys) ##dont' bin or smooth yet
+	##generate the data windows 
+	windows = np.zeros((ts.size,2))
+	windows[:,0] = ts-window[0]
+	windows[:,1] = ts+window[1]
+	windows = windows.astype(int)
+	##now get the data windows
+	X_trials = pe.X_windows(X_raw,windows) ##this is a LIST, not an array
+	return X_trials
+
+"""
 A function to get spike data for all the units/trials in a session. 
 Because trials can be a different length, this function stretches or
 squeezes trials into a uniform length using interpolation.

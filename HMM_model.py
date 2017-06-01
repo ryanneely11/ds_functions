@@ -129,3 +129,27 @@ def compute_actions(Ba):
 		actions[i] = np.random.choice(choices,p=probs)
 		Pa[i] = pa
 	return actions,Pa
+
+"""
+A function to compute the state prediction error, given 
+results from a model that has already been fit.
+Inputs:
+	-results: dictionary output from model_fitting.fit_models
+Returns:
+	-SPE: state prediction error on every trial
+"""
+def SPE(results):
+	##first get the relevant data from the results dict
+	actions = results['actions']
+	outcomes = results['outcomes']
+	s_upper = results['e_HMM'][1,:] ##upper lever state prob
+	s_lower = results['e_HMM'][0,:] ##Lower lever prob
+	SPE = np.zeros(actions.shape)
+	##compute spe for each trial
+	for t in range(actions.size):
+		if actions[t] == 2: ##case upper lever
+			s = s_upper[t] ##probability we are in the upper state
+		elif actions[t] == 1: ##case lower lever
+			s = s_lower[t] ##p(lower_state)
+		SPE[t] = s-outcomes[t]
+	return SPE

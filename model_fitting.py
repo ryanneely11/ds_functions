@@ -6,6 +6,7 @@ import session_analysis as sa
 import SMC as smc
 import HMM_model as hmm
 import RL_model as rl
+import full_analyses as fa
 
 """
 A function to fit RL and HMM models to behavior data from
@@ -55,6 +56,52 @@ def fit_models(f_behavior):
 	}
 	return results
 
+"""
+Same as above function, but fits models to all sessions for one animal
+concatenated together.
+Inputs:
+	animal_id: id of the animal to get sessions from
+Returns
+	Results: ictionary with the following fields
+		actions: actions performed by the subject.
+			1= lower_lever, 2 = upper_lever
+		RL_actions: actions performed by the RL model
+		HMM_actions: actions performed by the HMM model
+		e_RL: resulting particles from RL model
+		e_HMM: resulting particles form HMM model
+		ll_RL: log-liklihood from RL model
+		ll_HMM: log-liklihood for HMM model
+"""
+def fit_models_all(animal_id):
+	actions, outcomes,switch_times,first_block = fa.concatenate_behavior(animal_id)
+	##compute model fits. for RL model:
+	initp = rl.initp(10000)
+	sd_jitter = [0.01,0.01,0.001,0.001]
+	e_RL,v_RL = smc.SMC(actions,outcomes,initp,sd_jitter,rl.rescorlawagner,rl.boltzmann)
+	##now for HMM
+	initp = hmm.initp(10000)
+	sd_jitter = [0.01,0.01,0.001,0.001,0.001]
+	e_HMM,v_HMM = smc.SMC(actions,outcomes,initp,sd_jitter,hmm.compute_belief,hmm.action_weights)
+	##now compute the actions that would be taken by each model
+	RL_actions,RL_Pa = rl.compute_actions(e_RL[0,:],e_RL[1,:],e_RL[3,:])
+	HMM_actions,HMM_Pa = hmm.compute_actions(e_HMM[0,:])
+	##finally, compute the log-liklihood for each model
+	ll_RL = log_liklihood(actions,RL_Pa)
+	ll_HMM = log_liklihood(actions,HMM_Pa)
+	##compile all of the data into a results dictionary
+	results = {
+	'actions':actions,
+	'outcomes':outcomes,
+	'RL_actions':RL_actions,
+	'HMM_actions':HMM_actions,
+	'e_RL':e_RL,
+	'e_HMM':e_HMM,
+	'll_RL':ll_RL,
+	'll_HMM':ll_HMM,
+	'switch_times':switch_times,
+	'first_block':first_block
+	}
+	return results
 
 
 """
@@ -106,3 +153,38 @@ def log_liklihood(subject_actions,Pa):
 		(s_b*np.log(Pb)).sum()/s_b.sum())
 	return logL
 
+"""
+A function to compute prediction accuracy; in other words,
+when what percentage of the subject's behavior was correctly
+predicted by the model?
+Inputs:
+	subject_actions: array of actions taken by the subject
+	model_actions: array of ations taken by the model
+Returns: 
+	accuracy: percentage correct prediction by the model
+"""
+def accuracy(subject_actions,model_actions):
+	return (subject_actions==model_actions).sum()/subject_actions.size
+
+"""
+A function to compute accuracy over time in a sliding window
+Inputs:
+	subject_actions: array of actions taken by the subject
+	model_actions: array of ations taken by the model
+	win: sliding window as [window,win_step]
+Returns: 
+	accuracy: percentage correct prediction by the model over time
+"""
+def sliding_accuracy(subject_actions,model_actions,win=[50,10]):
+	N = subject_actions.size
+	Nwin = int(win[0])
+	Nstep = int(win[1])
+	winstart = np.arange(0,N-Nwin,Nstep)
+	nw = winstart.shape[0]
+	acc = np.zeros(nw)
+	for n in range(nw):
+		idx = np.arange(winstart[n],winstart[n]+Nwin)
+		data_s = subject_actions[idx]
+		data_m = model_actions[idx]
+		acc[n] = accuracy(data_s,data_m)
+	return acc

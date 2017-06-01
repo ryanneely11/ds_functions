@@ -63,9 +63,10 @@ def get_lfp_data(f_in):
 	##add the data to the list of arrays 
 	for i in range(len(ad_ts)):
 		ts = np.asarray(f[ad_ts[i]])
-		raw_ad = np.asarray(f[ad_ts[i]]) 
+		raw_ad = np.asarray(f[ad_data[i]]) 
 		#convert the ad ts to samples, and integers for indexing
 		ts = np.ceil((ts*1000)).astype(int)
+		ts = ts-ts[0]
 		##account for any gaps caused by pausing the plexon session ****IMPORTANT STEP****	
 		## The LFP signal may have fewer points than "duration" if 
 		##the session was paused, so we need to account for this

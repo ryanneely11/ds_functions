@@ -694,7 +694,7 @@ def plot_trials(f_behavior,save=False):
 	ax.legend(bbox_to_anchor=(1,1))
 
 """
-Plots model fits over days, comparing HMM and RL
+Plots model fits over days, comparing HMM and RL using log-liklihood
 """
 def plot_model_fits(save=False):
 	RL_fits, HMM_fits = fa.model_fits()
@@ -815,6 +815,14 @@ def plot_model_fits(save=False):
 		fig.savefig(r"D:\Ryan\DS_animals\plots\HMM_fits.svg")
 
 """
+Plots model fits over days, comparing HMM and RL using the accuracy of 
+action predictions
+"""
+def plot_model_fits2(win=[150,25]):
+	RL_fits,HMM_fits = fa.model_fits2(win=win)
+	
+
+"""
 plots trial data from a model
 """
 def plot_single_model_fit(f_behavior):
@@ -893,7 +901,7 @@ def plot_single_model_fit(f_behavior):
 	upper_rewarded,upper_unrewarded,upper_incorrect,lower_rewarded,lower_unrewarded,lower_incorrect = parse_actions(actions,outcomes,switch_times,first_block)
 	ax.plot(upper_rewarded,np.ones(len(upper_rewarded))*1.25+np.random.uniform(-0.04,0.04,size=len(upper_rewarded)),marker='o',color='r',linestyle='none')
 	ax.plot(upper_unrewarded,np.ones(len(upper_unrewarded))*1.25+np.random.uniform(-0.04,0.04,size=len(upper_unrewarded)),marker='o',markerfacecolor='none',color='r',linestyle='none')
-	ax.plot(upper_incorrect,np.ones(len(upper_incorrect))*1.25+np.random.uniform(-0.04,0.04,size=len(upper_incorrect)),linestyle='none',marker='+',color='b')
+	ax.plot(upper_incorrect,np.ones(len(upper_incorrect))*1.25+np.random.uniform(-0.04,0.04,size=len(upper_incorrect)),linestyle='none',marker='+',color='r')
 	ax.plot(lower_rewarded,np.zeros(len(lower_rewarded))+np.random.uniform(-0.04,0.04,size=len(lower_rewarded)),marker='o',color='b',linestyle='none')
 	ax.plot(lower_unrewarded,np.zeros(len(lower_unrewarded))+np.random.uniform(-0.04,0.04,size=len(lower_unrewarded)),marker='o',markerfacecolor='none',color='b',linestyle='none')
 	ax.plot(lower_incorrect,np.zeros(len(lower_incorrect))+np.random.uniform(-0.04,0.04,size=len(lower_incorrect)),linestyle='none',marker='+',color='b')
@@ -901,7 +909,7 @@ def plot_single_model_fit(f_behavior):
 	upper_rewarded,upper_unrewarded,upper_incorrect,lower_rewarded,lower_unrewarded,lower_incorrect = parse_actions(HMM_actions,outcomes,switch_times,first_block)
 	ax.plot(upper_rewarded,np.ones(len(upper_rewarded))+np.random.uniform(-0.04,0.04,size=len(upper_rewarded)),marker='o',color='r',linestyle='none')
 	ax.plot(upper_unrewarded,np.ones(len(upper_unrewarded))+np.random.uniform(-0.04,0.04,size=len(upper_unrewarded)),marker='o',markerfacecolor='none',color='r',linestyle='none')
-	ax.plot(upper_incorrect,np.ones(len(upper_incorrect))+np.random.uniform(-0.04,0.04,size=len(upper_incorrect)),linestyle='none',marker='+',color='b')
+	ax.plot(upper_incorrect,np.ones(len(upper_incorrect))+np.random.uniform(-0.04,0.04,size=len(upper_incorrect)),linestyle='none',marker='+',color='r')
 	ax.plot(lower_rewarded,np.zeros(len(lower_rewarded))-0.25+np.random.uniform(-0.04,0.04,size=len(lower_rewarded)),marker='o',color='b',linestyle='none')
 	ax.plot(lower_unrewarded,np.zeros(len(lower_unrewarded))-0.25+np.random.uniform(-0.04,0.04,size=len(lower_unrewarded)),marker='o',markerfacecolor='none',color='b',linestyle='none')
 	ax.plot(lower_incorrect,np.zeros(len(lower_incorrect))-0.25+np.random.uniform(-0.04,0.04,size=len(lower_incorrect)),linestyle='none',marker='+',color='b')

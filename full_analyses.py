@@ -45,6 +45,31 @@ def model_fits():
 			RL_fits[n,m] = results['ll_RL']
 	return RL_fits,HMM_fits
 
+"""
+A possibly better way to look at model fits by using prediction accuracy
+as the metric, and fitting models using data concatenated across training 
+sessions for individual animals.
+Inputs:
+	win: sliding window in form [window, winstep]
+Returns:
+	RL_fits: accuracy of RL model over time for each animal
+	HMM_fits: accuracy of HMM model over time for each animal
+"""
+def model_fits2(win=[100,25]):
+	animals = file_lists.animals
+	RL_fits = []
+	HMM_fits = []
+	for animal in animals:
+		results = mf.fit_models_all(animal)
+		RL_actions = results['RL_actions']
+		HMM_actions = results['HMM_actions']
+		actions = results['actions']
+		RL_fits.append(mf.sliding_accuracy(actions,RL_actions,win))
+		HMM_fits.append(mf.sliding_accuracy(actions,HMM_actions,win))
+	##add NANs to equalize the length of the arrays
+	RL_fits = equalize_arrs(RL_fits)
+	HMM_fits = equalize_arrs(HMM_fits)
+	return RL_fits,HMM_fits
 
 
 """
@@ -431,6 +456,60 @@ def run_dpca_all(conditions,smooth_method='both',smooth_width=[80,40],pad=[400,4
 		sig_all.append(results[i][2])
 	return Z_all,var_all,sig_all
 
+"""
+This function is designed to concatenate behavioral data across sessions,
+for each animal individually. The initial purpose is to create a dataset
+to run model fitting on, but it could probably be used for something else.
+Inputs:
+	animal_id: ID of animal to use 
+Returns:
+	actions: array of actions, where 1 = lower lever, and 2 = upper lever
+	outcomes: array of outcomes (1=rewarded, 0=unrewarded)
+	switch_times: array of trial values at which point the rewarded lever switched
+	first_block: rule identitiy of the first block
+"""
+def concatenate_behavior(animal_id):
+	actions = []
+	outcomes = []
+	switch_times = []
+	first_block = None
+	session_list = file_lists.split_behavior_by_animal()[animal_id][6:] ##first 6 days have only one lever
+	block_types = ['upper_rewarded','lower_rewarded']
+	n_trials = 0
+	##populate the master lists with the first file
+	a,o,st,first_block = mf.get_session_data(session_list[0])
+	actions.append(a)
+	outcomes.append(o)
+	switch_times.append(st)
+	n_trials += a.size ##to keep track of how many trials have been added
+	##record the identity of the last block
+	def get_last_block(first_block,switch_times):
+		block_types = ['upper_rewarded','lower_rewarded']
+		if len(switch_times)%2 > 0: ##if we have an odd number of blocks, then
+		##the last block in the session is NOT the same as the starting block
+			last_block = [x for x in block_types if x != first_block][0]
+		elif len(switch_times)%2 == 0:
+			last_block = first_block
+		return last_block
+	last_block = get_last_block(first_block,st)
+	##now run through the remaining sessions
+	for i in range(1,len(session_list)):
+		f_behavior = session_list[i]
+		a,o,st,fb = mf.get_session_data(f_behavior)
+		##append new data
+		actions.append(a)
+		outcomes.append(o)
+		##need to compute the last block for this session before we mess with 
+		##the block switches
+		this_last = get_last_block(fb,st)
+		##figure out if the blocks switched from last session end to new session start
+		if last_block != fb:
+			st = np.concatenate((np.array([0]),st))
+		##make sure we offset the trial count
+		switch_times.append(st + n_trials)
+		last_block = this_last
+		n_trials+=a.size
+	return np.concatenate(actions),np.concatenate(outcomes),np.concatenate(switch_times),first_block
 
 """
 A function to get a dataset that includes data from all animals and sessions, for all trials AND switch trials.

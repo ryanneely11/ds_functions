@@ -90,3 +90,29 @@ def compute_actions(Qa,Qb,Beta):
 		actions[i] = np.random.choice(choices,p=probs)
 		Pa[i] = pa
 	return actions,Pa
+
+"""
+A function to compute the reward prediction error.
+Inputs are data from a fitted model/behavior pair.
+Inputs:
+	Results a results dictionary from model_fitting.fit_models.
+Returns:
+	RPE: the reward prediction error at every trial
+"""
+def RPE(results):
+	##first get the value of upper and lower lever presses on each trial
+	Q_upper = results['e_RL'][1,:]
+	Q_lower = results['e_RL'][0,:]
+	##actions and outcomes (actual)
+	actions = results['actions']
+	outcomes = results['outcomes']
+	##allocate memory
+	RPE = np.zeros(actions.shape)
+	##compute for each trial
+	for t in range(actions.size):
+		if actions[t] == 2: ##case upper lever
+			Q = Q_upper[t]
+		elif actions[t] == 1: #case lower lever
+			Q = Q_lower[t]
+		RPE[t] = Q-outcomes[t]
+	return RPE
