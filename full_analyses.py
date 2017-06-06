@@ -18,6 +18,30 @@ import multiprocessing as mp
 import log_regression3 as lr3
 import log_regression2 as lr2
 import model_fitting as mf
+import file_lists_unsorted as flu
+
+"""
+A function to compute decision variables
+Inputs:
+	-window [pre_event, post_event] window, in ms
+	-smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	-smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	-min_rate: minimum acceptable spike rate, in Hz
+"""
+def decision_vars(window=[800,100],smooth_method='bins',smooth_width=100,min_rate=0.5):
+	upper_odds = []
+	lower_odds = []
+	for f_behavior, f_ephys in zip(file_lists.e_behavior,file_lists.ephys_files):
+		try:
+			u,l = sa.decision_variables(f_behavior,f_ephys,window=window,smooth_method=smooth_method,
+				smooth_width=smooth_width,min_rate=min_rate)
+			upper_odds.append(u)
+			lower_odds.append(l)
+		except:
+			print("warning- skipping one file")
+	return np.concatenate(upper_odds,axis=0),np.concatenate(lower_odds,axis=0)
+
 
 """
 Model fitting: this function fits an HMM model and an RL model to each behavioral
@@ -261,6 +285,32 @@ def get_trial_durations(max_duration=5000,session_range=None):
 		all_durations.append(sa.session_trial_durations(f_behavior,max_duration=max_duration))
 	return np.concatenate(all_durations)
 
+
+"""
+A function to concatenate the spike data from all sessions for a given animal.
+This function is meant to operate on the assumtion that the number of spike
+channels (and roughly the identity of neurons on those channels) stays constant.
+An error will be returned if there are variations in spike channel number across days.
+Inputs:
+	animal_id: string identifier of animal to get data for
+	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	smooth_width: size of the bins or gaussian kernel in ms. If both, input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+Returns:
+	X: spike data matrix of size units x bins. Data is z-scored WITHIN each DAY
+		in an attempt to make things at least a little bit consistent
+"""
+def concatenate_spikes(animal_id,smooth_method='both',smooth_width=[80,40]):
+	##get the file names from the multiunit hash
+	ephys_files = flu.split_ephys_by_animal()[animal_id]
+	data = [] ##container for individual data pieces
+	for f_ephys in ephys_files:
+		data.append(pe.get_spike_data(f_ephys,smooth_method=smooth_method,
+			smooth_width=smooth_width,z_score=True))
+	X = np.concatenate(data)
+
+
+
 """
 A function to get a dataset that includes data from all animals and sessions,
 specifically formatted to use in a dPCA analysis.
@@ -457,6 +507,29 @@ def run_dpca_all(conditions,smooth_method='both',smooth_width=[80,40],pad=[400,4
 	return Z_all,var_all,sig_all
 
 """
+A function to concatenate the spike data from all sessions for a given animal.
+This function is meant to operate on the assumtion that the number of spike
+channels (and roughly the identity of neurons on those channels) stays constant.
+An error will be returned if there are variations in spike channel number across days.
+Inputs:
+	animal_id: string identifier of animal to get data for
+	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	smooth_width: size of the bins or gaussian kernel in ms. If both, input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+Returns:
+	X: spike data matrix of size units x bins. Data is z-scored WITHIN each DAY
+		in an attempt to make things at least a little bit consistent
+"""
+def concatenate_spikes(animal_id,smooth_method='both',smooth_width=[80,40]):
+	##get the file names from the multiunit hash
+	ephys_files = flu.split_ephys_by_animal()[animal_id]
+	data = [] ##container for individual data pieces
+	for f_ephys in ephys_files:
+		data.append(pe.get_spike_data(f_ephys,smooth_method=smooth_method,
+			smooth_width=smooth_width,z_score=True))
+	X = np.concatenate(data)
+
+"""
 This function is designed to concatenate behavioral data across sessions,
 for each animal individually. The initial purpose is to create a dataset
 to run model fitting on, but it could probably be used for something else.
@@ -474,6 +547,71 @@ def concatenate_behavior(animal_id):
 	switch_times = []
 	first_block = None
 	session_list = file_lists.split_behavior_by_animal()[animal_id][6:] ##first 6 days have only one lever
+	block_types = ['upper_rewarded','lower_rewarded']
+	n_trials = 0
+	##populate the master lists with the first file
+	a,o,st,first_block = mf.get_session_data(session_list[0])
+	actions.append(a)
+	outcomes.append(o)
+	switch_times.append(st)
+	n_trials += a.size ##to keep track of how many trials have been added
+	##record the identity of the last block
+	def get_last_block(first_block,switch_times):
+		block_types = ['upper_rewarded','lower_rewarded']
+		if len(switch_times)%2 > 0: ##if we have an odd number of blocks, then
+		##the last block in the session is NOT the same as the starting block
+			last_block = [x for x in block_types if x != first_block][0]
+		elif len(switch_times)%2 == 0:
+			last_block = first_block
+		return last_block
+	last_block = get_last_block(first_block,st)
+	##now run through the remaining sessions
+	for i in range(1,len(session_list)):
+		f_behavior = session_list[i]
+		a,o,st,fb = mf.get_session_data(f_behavior)
+		##append new data
+		actions.append(a)
+		outcomes.append(o)
+		##need to compute the last block for this session before we mess with 
+		##the block switches
+		this_last = get_last_block(fb,st)
+		##figure out if the blocks switched from last session end to new session start
+		if last_block != fb:
+			st = np.concatenate((np.array([0]),st))
+		##make sure we offset the trial count
+		switch_times.append(st + n_trials)
+		last_block = this_last
+		n_trials+=a.size
+	return np.concatenate(actions),np.concatenate(outcomes),np.concatenate(switch_times),first_block
+
+"""
+This function is designed to concatenate behavioral data across sessions,
+for each animal individually. The initial purpose is to create a dataset
+to run model fitting on, but it could probably be used for something else.
+Inputs:
+	animal_id: ID of animal to use
+	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	smooth_width: size of the bins or gaussian kernel in ms. If both, input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+Returns:
+	actions: array of actions, where 1 = lower lever, and 2 = upper lever
+	outcomes: array of outcomes (1=rewarded, 0=unrewarded)
+	switch_times: array of trial values at which point the rewarded lever switched
+	first_block: rule identitiy of the first block
+	X: spike data concatenated across all sessions
+"""
+def concatenate_behavior_and_ephys(animal_id):
+	actions = []
+	outcomes = []
+	switch_times = []
+	first_block = None
+	behavior_file = flu.split_behavior_by_animal(match_ephys=True)[animal_id] ##first 6 days have only one lever
+	ephys_files = flu.split_ephys_by_animal()[animal_id]
+	##make sure everything matches
+	b_days = [x[-8:-5] for x in behavior_files]
+	e_days = [x[-10:-7] for x in ephys_files]
+	assert b_days == e_days
+	spike_data = []
 	block_types = ['upper_rewarded','lower_rewarded']
 	n_trials = 0
 	##populate the master lists with the first file

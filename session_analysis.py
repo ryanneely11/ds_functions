@@ -322,6 +322,50 @@ def session_dpca(f_behavior,f_ephys,smooth_method='both',smooth_width=[40,50],
 	return Z,time,var_explained,sig_masks,events
 
 """
+This analysis was inspired by a talk from Newsome. The idea is to use logistic
+regression to get the log odds of making a left or right choice on each trial, across
+time within trials. An important assumtption is that the beta weights are more or less
+constant across time within one epoch.
+Inputs:
+	-f_behavior: path to behavior data file
+	-f_ephys: path to ephys data file
+	-window [pre_event, post_event] window, in ms
+	-smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	-smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	-min_rate: minimum acceptable spike rate, in Hz
+"""
+def decision_variables(f_behavior,f_ephys,window,smooth_method='both',smooth_width=[80,40],
+	min_rate=0.5):
+	##get the raw data 
+	X_upper = ptr.get_event_spikes(f_behavior,f_ephys,'upper_lever',window=window,
+		smooth_method=smooth_method,smooth_width=smooth_width,z_score=True,min_rate=min_rate,
+		nan=True)
+	X_lower = ptr.get_event_spikes(f_behavior,f_ephys,'lower_lever',window=window,
+		smooth_method=smooth_method,smooth_width=smooth_width,z_score=True,min_rate=min_rate,
+		nan=True)
+	[X_upper,X_lower] = ptr.remove_nan_units([X_upper,X_lower])
+	##construct the labels
+	labels = np.zeros(X_lower.shape[0]+X_upper.shape[0])
+	labels[X_lower.shape[0]:]=1
+	X_all = np.concatenate([X_lower,X_upper],axis=0)
+	##compute the beta weights across the whole trial interval
+	betas = lr3.get_betas(X_all,labels)
+	##now take the mean across the whole interval (this assumes they are relatively constant)
+	betas = betas.mean(axis=0)
+	##the first value is for the intercept, so we can ignore it
+	betas = betas[1:]
+	##OK, now we can compute the log odds (?) for upper and lower choice trials
+	upper_odds = np.zeros((X_upper.shape[0],X_upper.shape[2]))
+	for t in range(X_upper.shape[2]):
+		upper_odds[:,t] = np.dot(X_upper[:,:,t],betas)
+	lower_odds = np.zeros((X_lower.shape[0],X_lower.shape[2]))
+	for t in range(X_lower.shape[2]):
+		lower_odds[:,t] = np.dot(X_lower[:,:,t],betas)
+	return upper_odds,lower_odds
+
+
+"""
 This function is designed to "standardize" a given trial. The rationale is that
 many sessions have a similar structure, and if we standardize all sessions, we can
 concatenate them and then run analyses on data from all sessions and animals,

@@ -5,6 +5,9 @@ import h5py
 import numpy as np
 from scipy.stats import zscore
 from scipy.ndimage.filters import gaussian_filter
+import os
+import plxread
+import glob
 
 """
 A function to return a spike data matrix from
@@ -15,7 +18,6 @@ Inputs:
 	smooth_width: size of the bins or gaussian kernel in ms. If both, input should be a list
 		with index 0 being the gaussian width and index 1 being the bin width
 	z_score: if True, z-scores the array
-	$$NOTE$$: this implementatin does not allow binning AND gaussian smoothing.
 Returns:
 	X: spike data matrix of size units x bins
 """
@@ -75,6 +77,7 @@ def get_lfp_data(f_in):
 		L[i,:] = full_ad
 	f.close()
 	return L
+
 
 """
 A function to parse a data raw data array (X) into windows of time.
@@ -234,3 +237,80 @@ def concatenate_trials(X):
 	return np.concatenate(X,axis=1)
 
 
+"""
+this script looks in a directory, takes the plx files and saves a copy as an HDF5 file.
+
+"""
+def batch_plx_to_hdf5(directory):
+	##first, get a list of the plx files in the directory:
+	cd = os.getcwd() ##to return to the cd later
+	os.chdir(directory)
+	for f in glob.glob("*.plx"):
+		cur_file = os.path.join(directory,f)
+		print("Saving "+cur_file)
+		##create the output file in the same dir
+		try:
+			out_file = h5py.File(cur_file.strip('plx')+'hdf5','w-')
+			##parse the plx file
+			data = plxread.import_file(cur_file,AD_channels=range(1,256),import_unsorted=False,
+				verbose=False,import_wf=True)
+			##save the data
+			for k in data.keys():
+				out_file.create_dataset(k,data=data[k])
+			out_file.close()
+		except IOError:
+			print(cur_file.strip('plx')+'hdf5 exists; skipping')
+	os.chdir(cd)
+	print("Done!")
+	return None
+
+"""
+this script looks in a directory, takes the plx files and saves a copy as an 
+HDF5 file.
+It is similar to the above function, except it bundles together all of the data
+on one electrode, including unsorted timestamps. Therefore it returns 
+"neuron hash" on each channel, rather than the sorted single units.
+Inputs:
+	directory: path to plx file directory (all files here will be converted)
+Returns:
+	None, but data will be saved as HDF5 files in the same directory.
+		all spike data for each channel will be saved as the dataset "sigxxx",
+		similar to other formats
+**********Note: plxread is crashing in python 3 when you try to import AD_channels,
+		so for now I am not importing any*******************
+"""
+def batch_plx_to_hdf5_hash(directory):
+	##first, get a list of the plx files in the directory:
+	cd = os.getcwd() ##to return to the cd later
+	os.chdir(directory)
+	for f in glob.glob("*.plx"):
+		cur_file = os.path.join(directory,f)
+		print("Saving "+cur_file)
+		##create the output file in the same dir
+		try:
+			out_file = h5py.File(cur_file.strip('.plx')+'_h.hdf5','w-')
+			##parse the plx file
+			data = plxread.import_file(cur_file,import_unsorted=True,
+				verbose=False,import_wf=True)
+			##save the non-spike data
+			for k in [x for x in data.keys() if not x.startswith('sig')]:
+				out_file.create_dataset(k,data=data[k])
+			##now concatenate all of the sorted and unsorted timestamps for each channel
+			spk_chans = [x for x in data.keys() if x.startswith('sig')]
+			while len(spk_chans)>0:
+				##pick the first channel in the list and get all of the
+				##spikes that were recorded on this channel
+				cnum = spk_chans[0][-4:-1]
+				chan_list = [y for y in spk_chans if y[-4:-1]==cnum]
+				##now concatenate all of these timestamps together
+				nhash = np.concatenate([data[x] for x in chan_list])
+				##add this data to the hdf5 file
+				out_file.create_dataset('sig'+cnum+'i',data=nhash)
+				##finally, remove these channels from the spk_chans list
+				spk_chans = [x for x in spk_chans if not x in chan_list]
+			out_file.close()
+		except IOError:
+			print(cur_file.strip('plx')+'hdf5 exists; skipping')
+	os.chdir(cd)
+	print("Done!")
+	return None

@@ -129,6 +129,26 @@ def permutation_test_multi(X,y,n_iter_cv=5,n_iter_p=500):
 	return accuracies,chance_rates,p_vals,llr_pvals
 
 """
+This function returns the beta parameters across several time
+steps for binned spike counts from a number of neurons. 
+Inputs:
+	X: binned spike data, shape n-trials x m neurons x t bins
+	y: labels, in binary format, for each trial
+Returns:
+	betas: beta values at each time step
+"""
+def get_betas(X,y):
+	##allocate space
+	betas = np.zeros((X.shape[2],X.shape[1]+1)) ##add one because we will add a constant
+	##compute for each time step
+	for i in range(X.shape[2]): ##the bin number
+		x = sm.tools.tools.add_constant(X[:,:,i]) ##should be trials (obs) x units
+		logit = sm.Logit(y,x)
+		results = logit.fit(method='newton',disp=False,skip_hessian=True,warn_convergence=False)
+		betas[i,:] = results.params
+	return betas
+
+"""
 A helper function to make a non-binary array
 that consists of only two values into a binary array of 1's 
 and 0's to use in regression
