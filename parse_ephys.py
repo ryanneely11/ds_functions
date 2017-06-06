@@ -6,8 +6,11 @@ import numpy as np
 from scipy.stats import zscore
 from scipy.ndimage.filters import gaussian_filter
 import os
-import plxread
 import glob
+try:
+	import plxread
+except:
+	print("Warning: plxread not imported")
 
 """
 A function to return a spike data matrix from
@@ -291,7 +294,7 @@ def batch_plx_to_hdf5_hash(directory):
 			out_file = h5py.File(cur_file.strip('.plx')+'_h.hdf5','w-')
 			##parse the plx file
 			data = plxread.import_file(cur_file,import_unsorted=True,
-				verbose=False,import_wf=True)
+				verbose=False,import_wf=True,AD_channels=range(1,96))
 			##save the non-spike data
 			for k in [x for x in data.keys() if not x.startswith('sig')]:
 				out_file.create_dataset(k,data=data[k])
