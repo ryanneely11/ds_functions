@@ -1558,7 +1558,7 @@ def plot_tensors(factors,trial_data,n_factors=4,plots=['bar','line','scatter'],y
 				axes[r,i].set_xlim(0, f.shape[0]+1)
 			elif plots[i] == 'scatter':
 				plot_obj[r,i] = axes[r,i]
-				for trial_type in trial_info.keys():
+				for trial_type in [x for x in list(trial_info) if not (x =='n_blocks' or x=='block_lengths')]:
 					x = trial_info[trial_type]
 					y = f[x,r]
 					marker,color,facecolor = get_line_props(trial_type)

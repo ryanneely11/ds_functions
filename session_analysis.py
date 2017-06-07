@@ -440,6 +440,13 @@ def get_n_units(f_ephys):
 	f.close()
 	return n_units
 
+def get_session_duration(f_ephys):
+	f = h5py.File(f_ephys,'r')
+	AD_chans = [x for x in list(f) if x.endswith('_ts')]
+	ad = AD_chans[0]
+	duration = np.ceil(np.asarray(f[ad]).max()*1000).astype(int)
+	f.close()
+	return duration
 """
 A dictionary of event pairs to use in analyses.
 """
