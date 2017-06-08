@@ -133,9 +133,19 @@ returns:
 	model: the fitted logit model
 """
 def get_model(X,y):
-	lr = linear_model.LogisticRegression(penalty='l2',fit_intercept=True,
+	lr = linear_model.LogisticRegression(penalty='l2',fit_intercept=False,
 	solver='liblinear',max_iter=100,n_jobs=1,class_weight='balanced')
 	return lr.fit(X,y)
+
+def get_betas(X,y):
+	betas = np.zeros((X.shape[1],X.shape[2]))
+	for ts in range(X.shape[2]):
+		x = X[:,:,ts]
+		model = get_model(x,y)
+		coef = model.coef_.squeeze()
+		betas[:,ts] = coef
+	return betas
+
 
 """
 A function to predict the action taken on one trial given some basic parameters

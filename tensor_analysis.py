@@ -107,6 +107,7 @@ def concat_data(animal_id,smooth_method='both',smooth_width=[80,40],pad=[800,120
 		td['end_ts'] = td['end_ts']+clock
 		##add to master containers
 		trial_data = trial_data.append(td)
+		print('n_neurons={}'.format(x.shape[1]))
 		X.append(x)
 		clock+=duration
 	##reset the trial indices

@@ -16,7 +16,7 @@ import dpca
 import os
 import pandas as pd
 import model_fitting as mf
-
+from sklearn import linear_model
 save_root = os.path.join(file_lists.save_loc,"LogisticRegression/80gauss_40ms_bins")
 
 """
@@ -335,26 +335,41 @@ Inputs:
 		with index 0 being the gaussian width and index 1 being the bin width
 	-min_rate: minimum acceptable spike rate, in Hz
 """
-def decision_variables(f_behavior,f_ephys,window,smooth_method='both',smooth_width=[80,40],
-	min_rate=0.5):
+def decision_variables(f_behavior,f_ephys,pad,smooth_method='both',smooth_width=[80,40],
+	min_rate=0.1,z_score=True,trial_duration=None,max_duration=4000):
 	##get the raw data 
-	X_upper = ptr.get_event_spikes(f_behavior,f_ephys,'upper_lever',window=window,
-		smooth_method=smooth_method,smooth_width=smooth_width,z_score=True,min_rate=min_rate,
-		nan=True)
-	X_lower = ptr.get_event_spikes(f_behavior,f_ephys,'lower_lever',window=window,
-		smooth_method=smooth_method,smooth_width=smooth_width,z_score=True,min_rate=min_rate,
-		nan=True)
-	[X_upper,X_lower] = ptr.remove_nan_units([X_upper,X_lower])
+	X,trial_data = ptr.get_trial_spikes(f_behavior,f_ephys,smooth_method=smooth_method,
+		smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=trial_duration,
+		max_duration=max_duration,min_rate=min_rate)
+	##only take the data from the pre-action epoch
+	epoch = 'action'
+	if epoch == 'action':
+		if smooth_method == 'bins':
+			X = X[:,:,:int(pad[0]/smooth_width)]
+		elif smooth_method == 'both':
+			X = X[:,:,:int(pad[0]/smooth_width[1])]
+		else:
+			X = X[:,:,:int(pad[0])]
+	if epoch == 'outcome':
+		if smooth_method == 'bins':
+			X = X[:,:,int(-pad[1]/smooth_width):]
+		elif smooth_method == 'both':
+			X = X[:,:,int(-pad[1]/smooth_width[1]):]
+		else:
+			X = X[:,:,int(-pad[1]):]
+	##add a constant term
+	intercept = np.ones((X.shape[0],1,X.shape[2]))
+	X = np.concatenate([X,intercept],axis=1)
 	##construct the labels
-	labels = np.zeros(X_lower.shape[0]+X_upper.shape[0])
-	labels[X_lower.shape[0]:]=1
-	X_all = np.concatenate([X_lower,X_upper],axis=0)
+	labels = (np.asarray(trial_data['action'])=='upper_lever').astype(int)
 	##compute the beta weights across the whole trial interval
-	betas = lr3.get_betas(X_all,labels)
+	betas = lr2.get_betas(X,labels)
 	##now take the mean across the whole interval (this assumes they are relatively constant)
-	betas = betas.mean(axis=0)
-	##the first value is for the intercept, so we can ignore it
-	betas = betas[1:]
+	betas = np.amax(betas,axis=1)
+	upper_idx = np.where(labels==1)[0]
+	lower_idx = np.where(labels==0)[0]
+	X_upper = X[upper_idx,:,:]
+	X_lower = X[lower_idx,:,:]
 	##OK, now we can compute the log odds (?) for upper and lower choice trials
 	upper_odds = np.zeros((X_upper.shape[0],X_upper.shape[2]))
 	for t in range(X_upper.shape[2]):
