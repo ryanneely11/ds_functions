@@ -29,17 +29,21 @@ Inputs:
 		with index 0 being the gaussian width and index 1 being the bin width
 	-min_rate: minimum acceptable spike rate, in Hz
 """
-def decision_vars(window=[1200,120],smooth_method='both',smooth_width=[100,40],
+def decision_vars(pad=[1200,120],smooth_method='both',smooth_width=[100,40],
 	max_duration=4000,min_rate=0.1,z_score=True,trial_duration=None):
 	upper_odds = []
 	lower_odds = []
-	for f_behavior, f_ephys in zip(file_lists.e_behavior,file_lists.ephys_files):
-		print("Working on file {}".format(f_behavior[-11:-5]))
-		u,l = sa.decision_variables(f_behavior,f_ephys,window,smooth_method=smooth_method,
-			smooth_width=smooth_width,min_rate=min_rate,z_score=z_score,trial_duration=trial_duration,
-			max_duration=max_duration)
-		upper_odds.append(u)
-		lower_odds.append(l)
+	
+	arglist = [[b,e,pad,smooth_method,smooth_width,min_rate,z_score,trial_duration,
+	max_duration] for b,e in zip(file_lists.e_behavior,file_lists.ephys_files)]
+	pool = mp.Pool(processes=mp.cpu_count())
+	async_result = pool.map_async(sa.mp_decision_vars,arglist)
+	pool.close()
+	pool.join()
+	results = async_result.get()
+	for i in range(len(results)):
+		upper_odds.append(results[i][0])
+		lower_odds.append(results[i][1])
 	return np.concatenate(upper_odds,axis=0),np.concatenate(lower_odds,axis=0)
 
 

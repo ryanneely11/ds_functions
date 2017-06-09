@@ -365,7 +365,7 @@ def decision_variables(f_behavior,f_ephys,pad,smooth_method='both',smooth_width=
 	##compute the beta weights across the whole trial interval
 	betas = lr2.get_betas(X,labels)
 	##now take the mean across the whole interval (this assumes they are relatively constant)
-	betas = np.amax(betas,axis=1)
+	betas = np.mean(betas[:,-4:],axis=1)
 	upper_idx = np.where(labels==1)[0]
 	lower_idx = np.where(labels==0)[0]
 	X_upper = X[upper_idx,:,:]
@@ -377,8 +377,27 @@ def decision_variables(f_behavior,f_ephys,pad,smooth_method='both',smooth_width=
 	lower_odds = np.zeros((X_lower.shape[0],X_lower.shape[2]))
 	for t in range(X_lower.shape[2]):
 		lower_odds[:,t] = np.dot(X_lower[:,:,t],betas)
-	return upper_odds,lower_odds
+	return upper_odds,lower_odds,trial_data
 
+"""
+MP implementation
+"""
+def mp_decision_vars(args):
+	##parse args
+	f_behavior = args[0]
+	f_ephys = args[1]
+	pad = args[2]
+	smooth_method = args[3]
+	smooth_width = args[4]
+	min_rate = args[5]
+	z_score = args[6]
+	trial_duration = args[7]
+	max_duration = args[8]
+	print("Processing session {}".format(f_behavior[-11:-5]))
+	upper_odds,lower_odds = decision_variables(f_behavior,f_ephys,pad,smooth_method=smooth_method,
+		smooth_width=smooth_width,min_rate=min_rate,z_score=z_score,trial_duration=trial_duration,
+		max_duration=max_duration)
+	return upper_odds,lower_odds
 
 """
 This function is designed to "standardize" a given trial. The rationale is that

@@ -211,3 +211,12 @@ def split_behavior_by_animal():
 		files = [x for x in behavior_files if x[-11:-9]==a]
 		by_animal[a] = files
 	return by_animal
+
+def split_ephys_by_animal():
+	global animals
+	global ephys_files
+	by_animal = {}
+	for a in animals:
+		files = [x for x in ephys_files if x[-12:-11]==a]
+		by_animal[a] = files
+	return by_animal
