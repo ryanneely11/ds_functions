@@ -377,7 +377,9 @@ def decision_variables(f_behavior,f_ephys,pad,smooth_method='both',smooth_width=
 	lower_odds = np.zeros((X_lower.shape[0],X_lower.shape[2]))
 	for t in range(X_lower.shape[2]):
 		lower_odds[:,t] = np.dot(X_lower[:,:,t],betas)
-	return upper_odds,lower_odds,trial_data
+	##get the duration of this session to return 
+	session_duration = pe.get_session_duration(f_ephys)
+	return upper_odds,lower_odds,trial_data,session_duration
 
 """
 MP implementation
@@ -394,10 +396,10 @@ def mp_decision_vars(args):
 	trial_duration = args[7]
 	max_duration = args[8]
 	print("Processing session {}".format(f_behavior[-11:-5]))
-	upper_odds,lower_odds = decision_variables(f_behavior,f_ephys,pad,smooth_method=smooth_method,
+	upper_odds,lower_odds,trial_data = decision_variables(f_behavior,f_ephys,pad,smooth_method=smooth_method,
 		smooth_width=smooth_width,min_rate=min_rate,z_score=z_score,trial_duration=trial_duration,
 		max_duration=max_duration)
-	return upper_odds,lower_odds
+	return upper_odds,lower_odds,trial_data,session_duration
 
 """
 This function is designed to "standardize" a given trial. The rationale is that
