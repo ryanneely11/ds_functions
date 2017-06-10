@@ -396,7 +396,7 @@ def mp_decision_vars(args):
 	trial_duration = args[7]
 	max_duration = args[8]
 	print("Processing session {}".format(f_behavior[-11:-5]))
-	upper_odds,lower_odds,trial_data = decision_variables(f_behavior,f_ephys,pad,smooth_method=smooth_method,
+	upper_odds,lower_odds,trial_data,session_duration = decision_variables(f_behavior,f_ephys,pad,smooth_method=smooth_method,
 		smooth_width=smooth_width,min_rate=min_rate,z_score=z_score,trial_duration=trial_duration,
 		max_duration=max_duration)
 	return upper_odds,lower_odds,trial_data,session_duration

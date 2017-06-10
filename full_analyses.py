@@ -29,13 +29,19 @@ Inputs:
 		with index 0 being the gaussian width and index 1 being the bin width
 	-min_rate: minimum acceptable spike rate, in Hz
 """
-def decision_vars(pad=[1200,120],smooth_method='both',smooth_width=[100,40],
+def decision_vars(animal_id,pad=[1200,120],smooth_method='both',smooth_width=[100,40],
 	max_duration=4000,min_rate=0.1,z_score=True,trial_duration=None):
 	upper_odds = []
 	lower_odds = []
 	trial_data = pd.DataFrame()
+	behavior_files= file_lists.split_behavior_by_animal(match_ephys=True)[animal_id] ##first 6 days have only one lever
+	ephys_files = file_lists.split_ephys_by_animal()[animal_id]
+	##make sure everything matches
+	b_days = [x[-8:-5] for x in behavior_files]
+	e_days = [x[-9:-6] for x in ephys_files]
+	assert b_days == e_days
 	arglist = [[b,e,pad,smooth_method,smooth_width,min_rate,z_score,trial_duration,
-	max_duration] for b,e in zip(file_lists.e_behavior,file_lists.ephys_files)]
+	max_duration] for b,e in zip(behavior_files,ephys_files)]
 	pool = mp.Pool(processes=mp.cpu_count())
 	async_result = pool.map_async(sa.mp_decision_vars,arglist)
 	pool.close()
@@ -45,10 +51,16 @@ def decision_vars(pad=[1200,120],smooth_method='both',smooth_width=[100,40],
 	for i in range(len(results)):
 		upper_odds.append(results[i][0])
 		lower_odds.append(results[i][1])
-		td = results[2]
-		duration = results[3]
+		td = results[i][2]
+		duration = results[i][3]
 		td['start_ts'] = td['start_ts']+clock
-	return np.concatenate(upper_odds,axis=0),np.concatenate(lower_odds,axis=0)
+		td['action_ts'] = td['action_ts']+clock
+		td['outcome_ts'] = td['action_ts']+clock
+		td['end_ts'] = td['end_ts']+clock
+		clock += duration
+		trial_data = trial_data.append(td)
+	trial_data = trial_data.reset_index()
+	return np.concatenate(upper_odds,axis=0),np.concatenate(lower_odds,axis=0),trial_data
 
 
 """

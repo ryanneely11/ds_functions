@@ -203,12 +203,17 @@ for f_behavior,f_ephys in zip(e_behavior,ephys_files):
 		print("Warning: data file {} not detected".format(behavior_id))
 
 ### a function to get a dictionary of file paths split by animal.
-def split_behavior_by_animal():
+def split_behavior_by_animal(match_ephys=False):
 	global animals
 	global behavior_files
+	global e_behavior
 	by_animal = {}
+	if match_ephys:
+		all_files = e_behavior
+	else:
+		all_files = behavior_files
 	for a in animals:
-		files = [x for x in behavior_files if x[-11:-9]==a]
+		files = [x for x in all_files if x[-11:-9]==a]
 		by_animal[a] = files
 	return by_animal
 
@@ -217,6 +222,6 @@ def split_ephys_by_animal():
 	global ephys_files
 	by_animal = {}
 	for a in animals:
-		files = [x for x in ephys_files if x[-12:-11]==a]
+		files = [x for x in ephys_files if x[-12:-10]==a]
 		by_animal[a] = files
 	return by_animal
