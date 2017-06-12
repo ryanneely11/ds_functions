@@ -7,6 +7,7 @@ import SMC as smc
 import HMM_model as hmm
 import RL_model as rl
 import full_analyses as fa
+import parse_trials as ptr
 
 """
 A function to fit RL and HMM models to behavior data from
@@ -103,6 +104,52 @@ def fit_models_all(animal_id):
 	}
 	return results
 
+"""
+Same as above function, but computes actions,etc from a trial_data DataFrame
+Inputs:
+	animal_id: id of the animal to get sessions from
+Returns
+	Results: ictionary with the following fields
+		actions: actions performed by the subject.
+			1= lower_lever, 2 = upper_lever
+		RL_actions: actions performed by the RL model
+		HMM_actions: actions performed by the HMM model
+		e_RL: resulting particles from RL model
+		e_HMM: resulting particles form HMM model
+		ll_RL: log-liklihood from RL model
+		ll_HMM: log-liklihood for HMM model
+"""
+def fit_models_from_trial_data(trial_data):
+	actions,outcomes,switch_times,first_block = get_session_data_from_trial_data(trial_data)
+	##compute model fits. for RL model:
+	initp = rl.initp(10000)
+	sd_jitter = [0.01,0.01,0.001,0.001]
+	e_RL,v_RL = smc.SMC(actions,outcomes,initp,sd_jitter,rl.rescorlawagner,rl.boltzmann)
+	##now for HMM
+	initp = hmm.initp(10000)
+	sd_jitter = [0.01,0.01,0.001,0.001,0.001]
+	e_HMM,v_HMM = smc.SMC(actions,outcomes,initp,sd_jitter,hmm.compute_belief,hmm.action_weights)
+	##now compute the actions that would be taken by each model
+	RL_actions,RL_Pa = rl.compute_actions(e_RL[0,:],e_RL[1,:],e_RL[3,:])
+	HMM_actions,HMM_Pa = hmm.compute_actions(e_HMM[0,:])
+	##finally, compute the log-liklihood for each model
+	ll_RL = log_liklihood(actions,RL_Pa)
+	ll_HMM = log_liklihood(actions,HMM_Pa)
+	##compile all of the data into a results dictionary
+	results = {
+	'actions':actions,
+	'outcomes':outcomes,
+	'RL_actions':RL_actions,
+	'HMM_actions':HMM_actions,
+	'e_RL':e_RL,
+	'e_HMM':e_HMM,
+	'll_RL':ll_RL,
+	'll_HMM':ll_HMM,
+	'switch_times':switch_times,
+	'first_block':first_block
+	}
+	return results
+
 
 """
 A function to get the action or outcome
@@ -134,6 +181,66 @@ def get_session_data(f_behavior):
 	actions[meta['upper_lever']] = 2
 	outcomes[meta['rewarded']] = 1
 	return actions,outcomes,switch_times,first_block
+
+"""
+A different way of getting session data using a trial_data
+DataFrame. 
+Inputs:
+	trial_data: a DataFrame with trial data; works even if
+		it is a concatenation of many sessions
+Returns:
+	-actions: int array sequence of actions
+	-outcomes: int array sequence of outcomes
+	-switch_times: occurances of a block switch
+	-first_rewarded: the first block type
+"""
+def get_session_data(f_behavior,max_duration=5000):
+	trial_data = ptr.get_full_trials(f_behavior,pad=[400,400],max_duration=max_duration)
+	n_trials = trial_data.index.size
+	actions = np.zeros(n_trials)
+	outcomes = np.zeros(n_trials)
+	first_block = trial_data['context'][0]
+	upper_levers = np.where(trial_data['action']=='upper_lever')[0]
+	lower_levers = np.where(trial_data['action']=='lower_lever')[0]
+	rewarded = np.where(trial_data['outcome']=='rewarded_poke')[0]
+	unrewarded = np.where(trial_data['outcome']=='unrewarded_poke')[0]
+	actions[upper_levers]=2
+	actions[lower_levers]=1
+	outcomes[rewarded]=1
+	outcomes[unrewarded]=0
+	ctx = np.asarray(trial_data['context']=='upper_rewarded').astype(int)
+	switch_times = np.where(np.diff(ctx)!=0)[0]
+	return actions,outcomes,switch_times,first_block
+
+"""
+A different way of getting session data using a trial_data
+DataFrame. 
+Inputs:
+	trial_data: a DataFrame with trial data; works even if
+		it is a concatenation of many sessions
+Returns:
+	-actions: int array sequence of actions
+	-outcomes: int array sequence of outcomes
+	-switch_times: occurances of a block switch
+	-first_rewarded: the first block type
+"""
+def get_session_data_from_trial_data(trial_data):
+	n_trials = trial_data.index.size
+	actions = np.zeros(n_trials)
+	outcomes = np.zeros(n_trials)
+	first_block = trial_data['context'][0]
+	upper_levers = np.where(trial_data['action']=='upper_lever')[0]
+	lower_levers = np.where(trial_data['action']=='lower_lever')[0]
+	rewarded = np.where(trial_data['outcome']==1)[0]
+	unrewarded = np.where(trial_data['outcome']==0)[0]
+	actions[upper_levers]=2
+	actions[lower_levers]=1
+	outcomes[rewarded]=1
+	outcomes[unrewarded]=0
+	ctx = np.asarray(trial_data['context']=='upper_rewarded').astype(int)
+	switch_times = np.where(np.diff(ctx)!=0)[0]
+	return actions,outcomes,switch_times,first_block
+
 
 """
 A function to compute the log liklihood given:

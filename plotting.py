@@ -905,7 +905,7 @@ def plot_model_fits2(win=[150,25],chunk=10):
 """
 plots trial data from a model
 """
-def plot_single_model_fit(f_behavior):
+def plot_single_model_fit(results):
 	##get the model fits
 	results = mf.fit_models(f_behavior)
 
