@@ -231,8 +231,8 @@ def get_session_data_from_trial_data(trial_data):
 	first_block = trial_data['context'][0]
 	upper_levers = np.where(trial_data['action']=='upper_lever')[0]
 	lower_levers = np.where(trial_data['action']=='lower_lever')[0]
-	rewarded = np.where(trial_data['outcome']==1)[0]
-	unrewarded = np.where(trial_data['outcome']==0)[0]
+	rewarded = np.where(trial_data['outcome']=='rewarded_poke')[0]
+	unrewarded = np.where(trial_data['outcome']=='unrewarded_poke')[0]
 	actions[upper_levers]=2
 	actions[lower_levers]=1
 	outcomes[rewarded]=1

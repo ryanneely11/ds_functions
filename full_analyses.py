@@ -28,11 +28,12 @@ Inputs:
 	-smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
 		with index 0 being the gaussian width and index 1 being the bin width
 	-min_rate: minimum acceptable spike rate, in Hz
-"""
+	-state_thresh: percentage for state estimation to split trials into weak or strong belief
+		states. 0.1 = top 10% of weak or strong trials are put into this catagory
+"""	
 def decision_vars(animal_id,pad=[1200,120],smooth_method='both',smooth_width=[100,40],
-	max_duration=4000,min_rate=0.1,z_score=True,trial_duration=None):
-	upper_odds = []
-	lower_odds = []
+	max_duration=4000,min_rate=0.1,z_score=True,trial_duration=None,state_thresh=0.1):
+	odds = []
 	trial_data = pd.DataFrame()
 	behavior_files= file_lists.split_behavior_by_animal(match_ephys=True)[animal_id] ##first 6 days have only one lever
 	ephys_files = file_lists.split_ephys_by_animal()[animal_id]
@@ -40,19 +41,21 @@ def decision_vars(animal_id,pad=[1200,120],smooth_method='both',smooth_width=[10
 	b_days = [x[-8:-5] for x in behavior_files]
 	e_days = [x[-9:-6] for x in ephys_files]
 	assert b_days == e_days
+	##start by computing the log odds for every trial, 
+	##and also get the trial data for the trials
 	arglist = [[b,e,pad,smooth_method,smooth_width,min_rate,z_score,trial_duration,
 	max_duration] for b,e in zip(behavior_files,ephys_files)]
 	pool = mp.Pool(processes=mp.cpu_count())
 	async_result = pool.map_async(sa.mp_decision_vars,arglist)
 	pool.close()
 	pool.join()
+	##parse the multiprocessing results
 	results = async_result.get()
 	clock = 0
 	for i in range(len(results)):
-		upper_odds.append(results[i][0])
-		lower_odds.append(results[i][1])
-		td = results[i][2]
-		duration = results[i][3]
+		odds.append(results[i][0])
+		td = results[i][1]
+		duration = results[i][2]
 		td['start_ts'] = td['start_ts']+clock
 		td['action_ts'] = td['action_ts']+clock
 		td['outcome_ts'] = td['action_ts']+clock
@@ -60,7 +63,33 @@ def decision_vars(animal_id,pad=[1200,120],smooth_method='both',smooth_width=[10
 		clock += duration
 		trial_data = trial_data.append(td)
 	trial_data = trial_data.reset_index()
-	return np.concatenate(upper_odds,axis=0),np.concatenate(lower_odds,axis=0),trial_data
+	odds = np.concatenate(odds,axis=0)
+	##now, use the trial data to get HMM estimates of the hidden state
+	model_data = mf.fit_models_from_trial_data(trial_data)
+	##get the data about the HMM
+	e_HMM = model_data['e_HMM']
+	##now find the trial indices of the weak and strong trials
+	belief = np.abs(e_HMM[0]-e_HMM[1]) ##diff between upper and lower belief strength
+	sort_idx = np.argsort(belief) ##trial indices sorted from weak to strong belief states
+	n_split = np.ceil(state_thresh*belief.size).astype(int) ##number of trials to take for each case
+	weak_idx = sort_idx[:n_split] ##the first n_split weakest trials
+	strong_idx = sort_idx[-n_split:] ##the last n_split strongest trials
+	##now get the upper and lower lever trial info
+	upper_idx = np.where(trial_data['action']=='upper_lever')[0]
+	lower_idx = np.where(trial_data['action']=='lower_lever')[0]
+	##set up a results dictionary
+	output = {}
+	output['odds'] = odds
+	output['upper_odds'] = odds[upper_idx,:]
+	output['lower_odds'] = odds[lower_idx,:]
+	output['strong_odds'] = odds[strong_idx,:]
+	output['weak_odds'] = odds[weak_idx,:]
+	output['upper_strong_odds'] = odds[np.intersect1d(upper_idx,strong_idx),:]
+	output['upper_weak_odds'] = odds[np.intersect1d(upper_idx,weak_idx),:]
+	output['lower_strong_odds'] = odds[np.intersect1d(lower_idx,strong_idx),:]
+	output['lower_weak_odds'] = odds[np.intersect1d(lower_idx,weak_idx),:]
+	return output
+
 
 
 """

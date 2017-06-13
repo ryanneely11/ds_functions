@@ -139,17 +139,17 @@ Returns:
 """
 def get_betas(X,y,add_intercept=False):
 	##allocate space
-	betas = np.zeros((X.shape[2],X.shape[1])) ##add one because we will add a constant
+	betas = np.zeros((X.shape[1],X.shape[2])) ##add one because we will add a constant
 	##compute for each time step
 	for i in range(X.shape[2]): ##the bin number
 		if add_intercept:
 			x = sm.tools.tools.add_constant(X[:,:,i]) ##should be trials (obs) x units
-			betas = np.zeros((X.shape[2],X.shape[1]+1))
+			betas = np.zeros((X.shape[1]+1,X.shape[2]))
 		else:
 			x = X[:,:,i]
 		logit = sm.Logit(y,x)
 		results = logit.fit(method='newton',disp=False,skip_hessian=True,warn_convergence=False)
-		betas[i,:] = results.params
+		betas[:,i] = results.params
 	return betas
 
 """

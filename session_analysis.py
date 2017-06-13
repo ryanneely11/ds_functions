@@ -366,20 +366,13 @@ def decision_variables(f_behavior,f_ephys,pad,smooth_method='both',smooth_width=
 	betas = lr2.get_betas(X,labels)
 	##now take the mean across the whole interval (this assumes they are relatively constant)
 	betas = np.mean(betas[:,-4:],axis=1)
-	upper_idx = np.where(labels==1)[0]
-	lower_idx = np.where(labels==0)[0]
-	X_upper = X[upper_idx,:,:]
-	X_lower = X[lower_idx,:,:]
-	##OK, now we can compute the log odds (?) for upper and lower choice trials
-	upper_odds = np.zeros((X_upper.shape[0],X_upper.shape[2]))
-	for t in range(X_upper.shape[2]):
-		upper_odds[:,t] = np.dot(X_upper[:,:,t],betas)
-	lower_odds = np.zeros((X_lower.shape[0],X_lower.shape[2]))
-	for t in range(X_lower.shape[2]):
-		lower_odds[:,t] = np.dot(X_lower[:,:,t],betas)
+	##OK, now we can compute the log odds (?) for all of the trials
+	odds = np.zeros((X.shape[0],X.shape[2]))
+	for t in range(X.shape[2]):
+		odds[:,t] = np.dot(X[:,:,t],betas)
 	##get the duration of this session to return 
 	session_duration = pe.get_session_duration(f_ephys)
-	return upper_odds,lower_odds,trial_data,session_duration
+	return odds,trial_data,session_duration
 
 """
 MP implementation
@@ -396,10 +389,10 @@ def mp_decision_vars(args):
 	trial_duration = args[7]
 	max_duration = args[8]
 	print("Processing session {}".format(f_behavior[-11:-5]))
-	upper_odds,lower_odds,trial_data,session_duration = decision_variables(f_behavior,f_ephys,pad,smooth_method=smooth_method,
+	odds,trial_data,session_duration = decision_variables(f_behavior,f_ephys,pad,smooth_method=smooth_method,
 		smooth_width=smooth_width,min_rate=min_rate,z_score=z_score,trial_duration=trial_duration,
 		max_duration=max_duration)
-	return upper_odds,lower_odds,trial_data,session_duration
+	return odds,trial_data,session_duration
 
 """
 This function is designed to "standardize" a given trial. The rationale is that

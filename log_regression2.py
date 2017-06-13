@@ -132,9 +132,12 @@ input data
 returns: 
 	model: the fitted logit model
 """
-def get_model(X,y):
-	lr = linear_model.LogisticRegression(penalty='l2',fit_intercept=False,
-	solver='liblinear',max_iter=100,n_jobs=1,class_weight='balanced')
+def get_model(X,y,lasso=False):
+	if lasso:
+		lr = linear_model.LassoCV(fit_intercept=False)
+	else:
+		lr = linear_model.LogisticRegression(penalty='l2',fit_intercept=False,
+		solver='liblinear',max_iter=100,n_jobs=1,class_weight='balanced')
 	return lr.fit(X,y)
 
 def get_betas(X,y):
