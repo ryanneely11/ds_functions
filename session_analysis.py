@@ -17,7 +17,43 @@ import os
 import pandas as pd
 import model_fitting as mf
 from sklearn import linear_model
+import linear_regression as linr
 save_root = os.path.join(file_lists.save_loc,"LogisticRegression/80gauss_40ms_bins")
+
+"""
+A function to run linear regression on data from one session.
+Inputs: 
+	f_behavior: file path to behavior data
+	f_ephys: file path to ephys data
+	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	pad: a window for pre- and post-trial padding, in ms. In other words, an x-ms period of time 
+		before lever press to consider the start of the trial, and an x-ms period of time after
+		reward to consider the end of the trial. For best results, should be a multiple of the bin size
+	z_score: if True, z-scores the array
+	trial_duration: specifies the trial length (in ms) to squeeze trials into. If None, the function uses
+		the median trial length over the trials in the file
+	min_rate: the min spike rate, in Hz, to accept. Units below this value will be removed.
+	max_duration: maximum allowable trial duration (ms)
+	n_iter: number of iterations to use for permutation testing
+Returns:
+	f_counts: number of sig units at each time point using f-test
+	p_counts: "" using permutation test
+"""
+def linear_regression(f_behavior,f_ephys,smooth_method='both',smooth_width=[100,50],
+	pad=[800,800],z_score=True,trial_duration=None,min_rate=0.1,max_duration=5000,
+	n_iter=1000):
+	##first get the spike data and the trial data
+	Y,trial_data = ptr.get_trial_spikes(f_behavior,f_ephys,smooth_method=smooth_method,
+		smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=trial_duration,
+		min_rate=min_rate,max_duration=max_duration)
+	##now compute the regressor data using the trial data
+	X = np.asarray(linr.get_regressors(trial_data))
+	##Run the regression on these data
+	f_counts,p_counts = linr.regress_spike_matrix(X,Y,add_constant=True,n_iter=n_iter)
+	return f_counts,p_counts
+
 
 """
 A function to parse the results of a logistic regression. 

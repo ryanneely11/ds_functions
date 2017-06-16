@@ -1145,8 +1145,8 @@ def plot_decision_vars(pad=[2000,120],smooth_method='both',smooth_width=[100,40]
 	upper_sem = stats.sem(results['upper_odds'],axis=0)
 	upper_strong_mean = results['upper_strong_odds'].mean(axis=0)
 	upper_strong_sem = stats.sem(results['upper_strong_odds'],axis=0)
-	upper_weak_mean = results['upper_weak_odds'].mean(axis=0)-0.8
-	upper_weak_sem = stats.sem(results['upper_weak_odds'],axis=0)-0.8
+	upper_weak_mean = (results['upper_weak_odds']-0.8).mean(axis=0)
+	upper_weak_sem = stats.sem(results['upper_weak_odds']-0.8,axis=0)
 	##now plot
 	x = np.linspace(-pad[0]/1000,0,lower_mean.shape[0])
 	ax2.plot(x,lower_mean,color='b',linewidth=2,linestyle='--',label='all lower')
