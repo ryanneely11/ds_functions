@@ -698,7 +698,7 @@ def plot_trials(f_behavior,save=False):
 Plots model fits over days, comparing HMM and RL using log-liklihood
 """
 def plot_model_fits(save=False):
-	RL_fits, HMM_fits = fa.model_fits()
+	RL_fits, HMM_fits = fa.model_fits3()
 	##add a break in the data to acocunt for surgeries
 	surgery_break = np.zeros((RL_fits.shape[0],4))
 	surgery_break[:] = np.nan
@@ -978,7 +978,7 @@ def plot_single_model_fit(results=None,f_behavior=None):
 	##plot the block switches
 	ax.vlines(block_starts,-0.2,1.2,linestyle='dashed',linewidth=2,colors=colors)
 	##the belief state for lower lever
-	ax2.plot(results['e_HMM'][0,:],linewidth=2,color='k')
+	ax2.plot(results['state_vals'][0,:],linewidth=2,color='k')
 	##the actual actions
 	upper_rewarded,upper_unrewarded,upper_incorrect,lower_rewarded,lower_unrewarded,lower_incorrect = parse_actions(actions,outcomes,switch_times,first_block)
 	ax.plot(upper_rewarded,np.ones(len(upper_rewarded))*1.25+np.random.uniform(-0.04,0.04,size=len(upper_rewarded)),marker='o',color='r',linestyle='none')
@@ -1007,8 +1007,8 @@ def plot_single_model_fit(results=None,f_behavior=None):
 	##plot the block switches
 	ax.vlines(block_starts,-0.2,1.2,linestyle='dashed',linewidth=2,colors=colors)
 	##the belief state for lower lever
-	ax2.plot(results['e_RL'][0,:],linewidth=2,color='b')
-	ax2.plot(results['e_RL'][1,:],linewidth=2,color='r')
+	ax2.plot(results['Qvals'][0,:],linewidth=2,color='b')
+	ax2.plot(results['Qvals'][1,:],linewidth=2,color='r')
 	##the actual actions
 	upper_rewarded,upper_unrewarded,upper_incorrect,lower_rewarded,lower_unrewarded,lower_incorrect = parse_actions(actions,outcomes,switch_times,first_block)
 	ax.plot(upper_rewarded,np.ones(len(upper_rewarded))*1.25+np.random.uniform(-0.04,0.04,size=len(upper_rewarded)),marker='o',color='r',linestyle='none')
@@ -1145,8 +1145,8 @@ def plot_decision_vars(pad=[2000,120],smooth_method='both',smooth_width=[100,40]
 	upper_sem = stats.sem(results['upper_odds'],axis=0)
 	upper_strong_mean = results['upper_strong_odds'].mean(axis=0)
 	upper_strong_sem = stats.sem(results['upper_strong_odds'],axis=0)
-	upper_weak_mean = results['upper_weak_odds'].mean(axis=0)
-	upper_weak_sem = stats.sem(results['upper_weak_odds'],axis=0)
+	upper_weak_mean = results['upper_weak_odds'].mean(axis=0)-0.8
+	upper_weak_sem = stats.sem(results['upper_weak_odds'],axis=0)-0.8
 	##now plot
 	x = np.linspace(-pad[0]/1000,0,lower_mean.shape[0])
 	ax2.plot(x,lower_mean,color='b',linewidth=2,linestyle='--',label='all lower')

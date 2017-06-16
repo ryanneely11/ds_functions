@@ -153,3 +153,31 @@ def SPE(results):
 			s = s_lower[t] ##p(lower_state)
 		SPE[t] = s-outcomes[t]
 	return SPE
+
+"""
+A function that runs a session using an RL model
+with definable (fixed) parameters
+Inputs:
+	fit_results: model fitting results
+Returns:
+	results: performance of model using the given parameters
+"""
+def run_model(fit_results):
+	##parse some of the fitting results to construct the model
+	actions = fit_results['actions']
+	outcomes = fit_results['outcomes']
+	n_trials = actions.size
+	state_vals = np.zeros((2,n_trials)) ##this will be [0,:] Qlower and [1,:] Qupper
+	params = np.zeros((5,1))
+	params[0,:] = 0.5 ##p(state = lower)
+	params[1,:] = 0.5 ##p(state = upper)
+	params[2,:] = fit_results['e_HMM'][2,-1] ##p(reward | correct)
+	params[3,:] = fit_results['e_HMM'][3,-1]##p(reward | incorrect)
+	params[4,:] = fit_results['e_HMM'][4,-1]##gamma (transition probability)
+	##now run through each trial and compute the values at each step
+	for t in range(1,n_trials):
+		params = compute_belief(actions[t-1],outcomes[t-1],params)
+		state_vals[:,t] = params[0:2,0]
+	##now compute the model's actions and action selection probability
+	HMM_actions,p_lower = compute_actions(state_vals[0,:])
+	return HMM_actions,p_lower,state_vals

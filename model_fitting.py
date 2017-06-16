@@ -129,20 +129,29 @@ def fit_models_from_trial_data(trial_data):
 	initp = hmm.initp(10000)
 	sd_jitter = [0.01,0.01,0.001,0.001,0.001]
 	e_HMM,v_HMM = smc.SMC(actions,outcomes,initp,sd_jitter,hmm.compute_belief,hmm.action_weights)
-	##now compute the actions that would be taken by each model
-	RL_actions,RL_Pa = rl.compute_actions(e_RL[0,:],e_RL[1,:],e_RL[3,:])
-	HMM_actions,HMM_Pa = hmm.compute_actions(e_HMM[0,:])
+	##compile all of the data into a fit_results dictionary
+	fit_results = {
+	'actions':actions,
+	'outcomes':outcomes,
+	'e_RL':e_RL,
+	'e_HMM':e_HMM,
+	}
+	##now use the fitted parameter values to estimate the model actions
+	RL_actions,RL_p_lower,Qvals = rl.run_model(fit_results)
+	HMM_actions,HMM_p_lower,state_vals = hmm.run_model(fit_results)
 	##finally, compute the log-liklihood for each model
-	ll_RL = log_liklihood(actions,RL_Pa)
-	ll_HMM = log_liklihood(actions,HMM_Pa)
-	##compile all of the data into a results dictionary
+	ll_RL = log_liklihood(actions,RL_p_lower)
+	ll_HMM = log_liklihood(actions,HMM_p_lower)
+	##compile the results into a ductionary
 	results = {
 	'actions':actions,
 	'outcomes':outcomes,
 	'RL_actions':RL_actions,
 	'HMM_actions':HMM_actions,
-	'e_RL':e_RL,
-	'e_HMM':e_HMM,
+	'RL_p_lower':RL_p_lower,
+	'HMM_p_lower':HMM_p_lower,
+	'Qvals':Qvals,
+	'state_vals':state_vals,
 	'll_RL':ll_RL,
 	'll_HMM':ll_HMM,
 	'switch_times':switch_times,

@@ -116,3 +116,34 @@ def RPE(results):
 			Q = Q_lower[t]
 		RPE[t] = Q-outcomes[t]
 	return RPE
+
+"""
+A function that runs a session using an RL model
+with definable (fixed) parameters
+Inputs:
+	fit_results: model fitting results
+Returns:
+	results: performance of model using the given parameters
+"""
+def run_model(fit_results):
+	##parse some of the fitting results to construct the model
+	actions = fit_results['actions']
+	outcomes = fit_results['outcomes']
+	eta = fit_results['e_RL'][2,-1] ##final value of learning rate 
+	n_trials = actions.size
+	Qvals = np.zeros((2,n_trials)) ##this will be [0,:] Qlower and [1,:] Qupper
+	params = np.zeros((3,1))
+	params[0,:] = 0.5 ##Qlower
+	params[1,:] = 0.5 ##Qupper
+	params[2,:] = eta
+	##now run through each trial and compute the values at each step
+	for t in range(1,n_trials):
+		params = rescorlawagner(actions[t-1],outcomes[t-1],params)
+		Qvals[:,t] = params[0:2,0]
+	##now compute the model's actions and action selection probability
+	beta = np.ones(n_trials)
+	beta[:] = fit_results['e_RL'][3,-1]##the final beta value from the fitting
+	RL_actions,p_lower = compute_actions(Qvals[0,:],Qvals[1,:],beta)
+	return RL_actions,p_lower,Qvals
+
+

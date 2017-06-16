@@ -67,9 +67,9 @@ def decision_vars(animal_id,pad=[1200,120],smooth_method='both',smooth_width=[10
 	##now, use the trial data to get HMM estimates of the hidden state
 	model_data = mf.fit_models_from_trial_data(trial_data)
 	##get the data about the HMM
-	e_HMM = model_data['e_HMM']
+	state_vars = model_data['state_vals']
 	##now find the trial indices of the weak and strong trials
-	belief = np.abs(e_HMM[0]-e_HMM[1]) ##diff between upper and lower belief strength
+	belief = np.abs(state_vars[0]-state_vars[1]) ##diff between upper and lower belief strength
 	sort_idx = np.argsort(belief) ##trial indices sorted from weak to strong belief states
 	n_split = np.ceil(state_thresh*belief.size).astype(int) ##number of trials to take for each case
 	weak_idx = sort_idx[:n_split] ##the first n_split weakest trials
@@ -90,7 +90,19 @@ def decision_vars(animal_id,pad=[1200,120],smooth_method='both',smooth_width=[10
 	output['lower_weak_odds'] = odds[np.intersect1d(lower_idx,weak_idx),:]
 	return output
 
-
+"""
+Function to concatenate trial data for one animal. This does NOT use ephys
+datafiles, so timestamps will NOT be correct!!!
+"""
+def concat_trial_data(animal_id,match_ephys=False,max_duration=5000):
+	trial_data = pd.DataFrame()
+	behavior_files= file_lists.split_behavior_by_animal(match_ephys=match_ephys)[animal_id]
+	clock = 0
+	for f_behavior in behavior_files:
+		td = ptr.get_full_trials(f_behavior,max_duration=max_duration)
+		trial_data = trial_data.append(td)
+	trial_data = trial_data.reset_index()
+	return trial_data
 
 """
 Model fitting: this function fits an HMM model and an RL model to each behavioral
@@ -102,7 +114,7 @@ Returns:
 	-RL_fits: log-liklihood across sessions for each animal; animals x sessions 
 	-HMM_fits: ll across sessions for each animal 
 """
-def model_fits():
+def model_fits(max_duration=5000):
 	files_by_animal = file_lists.split_behavior_by_animal()
 	n_sessions = max([len(x) for x in files_by_animal.values()])-6 ##first 6 sessions only have 1 lever
 	n_animals = len(list(files_by_animal))
@@ -113,11 +125,28 @@ def model_fits():
 	for n,animal in enumerate(file_lists.animals):
 		sessions = files_by_animal[animal][6:] ##first 6 sessions only have 1 lever
 		for m, f_behavior in enumerate(sessions):
-			results = mf.fit_models(f_behavior)
+			trial_data = ptr.get_full_trials(f_behavior,max_duration=max_duration)
+			results = mf.fit_models_from_trial_data(trial_data)
 			HMM_fits[n,m] = results['ll_HMM']
 			RL_fits[n,m] = results['ll_RL']
 	return RL_fits,HMM_fits
 
+def model_fits3(max_duration=5000):
+	files_by_animal = file_lists.split_behavior_by_animal()
+	n_sessions = max([len(x) for x in files_by_animal.values()])-6 ##first 6 sessions only have 1 lever
+	n_animals = len(list(files_by_animal))
+	HMM_fits = np.zeros((n_animals,n_sessions))
+	RL_fits = np.zeros((n_animals,n_sessions))
+	HMM_fits[:] = np.nan
+	RL_fits[:] = np.nan
+	for n,animal in enumerate(file_lists.animals):
+		sessions = files_by_animal[animal][6:] ##first 6 sessions only have 1 lever
+		for m, f_behavior in enumerate(sessions):
+			trial_data = ptr.get_full_trials(f_behavior,max_duration=max_duration)
+			results = mf.fit_models_from_trial_data(trial_data)
+			HMM_fits[n,m] = mf.accuracy(results['actions'],results['HMM_actions'])
+			RL_fits[n,m] = mf.accuracy(results['actions'],results['RL_actions'])
+	return RL_fits,HMM_fits
 """
 A possibly better way to look at model fits by using prediction accuracy
 as the metric, and fitting models using data concatenated across training 
