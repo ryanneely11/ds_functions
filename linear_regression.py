@@ -119,7 +119,7 @@ def regress_timecourse(args):
 	p_pvals = np.zeros((n_coeffs,n_bins))
 	##run through analysis at each time step
 	for b in range(n_bins):
-		f_pvals[:,b] = lin_fit(X,y[:,b],add_constant=add_constant)
+		f_pvals[:,b] = lin_ftest(X,y[:,b],add_constant=add_constant)
 		if n_iter > 0:
 			p_pvals[:,b] = permutation_test(X,y[:,b],add_constant=add_constant,n_iter=n_iter)
 		else:
@@ -178,13 +178,24 @@ Inputs:
 	X: neural data; t-trials by n_neurons (single bin)
 	y: continuous task variable across trials
 	add_constant: True if you want to add a constant to the X data
+	n_iter: number of times to run the cross-validation
 Returns:
 
 """
-def lin_fit_rev(X,y,add_constant=True):
+def lin_fit(X,y,add_constant=True,n_iter=10):
 	if add_constant:
 		X = sm.add_constant(X)
-	##get the coefficients of the real data, to use as the comparison value
-	model = sm.OLS(y,X,has_constant=True)
-	results = model.fit(method='pinv')
-	coeffs = results.params[1:]
+	errors = np.zeros(n_iter)
+	for i in range(n_iter):
+		##split the data into train and test sets
+		X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.33,
+			random_state=42)
+		##now fit to the test data
+		model = sm.OLS(y_train,X_train,hasconst=True)
+		results = model.fit(method='pinv')
+		predictions = results.predict(X_test)
+		prediction_error = predictions-y_test
+		errors[i] = 
+		"""
+		Some accuracy testing here
+		"""
