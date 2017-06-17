@@ -21,6 +21,36 @@ import model_fitting as mf
 import file_lists_unsorted as flu
 
 """
+Run linear regression on all trials for all animals.
+Inputs:
+	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	pad: a window for pre- and post-trial padding, in ms. In other words, an x-ms period of time 
+		before lever press to consider the start of the trial, and an x-ms period of time after
+		reward to consider the end of the trial. For best results, should be a multiple of the bin size
+	z_score: if True, z-scores the array
+	min_rate: the min spike rate, in Hz, to accept. Units below this value will be removed.
+	max_duration: maximum allowable trial duration (ms)
+	n_iter: number of iterations to use for permutation testing
+"""
+def linear_regression(smooth_method='both',smooth_width=[100,50],pad=[800,800],
+	z_score=True,min_rate=0.1,max_duration=5000,n_iter=1000):
+	##get the median trial duration to interpolate to
+	med_duration = np.median(get_trial_durations(max_duration=max_duration,session_range=None)).astype(int)
+	proportions_f = []
+	proportions_p = []
+	for f_behavior,f_ephys in zip(file_lists.e_behavior,file_lists.ephys_files):
+		print("Processing {}".format(f_behavior[-11:-5]))
+		f_perc,p_perc = sa.linear_regression(f_behavior,f_ephys,smooth_method=smooth_method,
+			smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=med_duration,
+			min_rate=min_rate,max_duration=max_duration,n_iter=n_iter,perc=True)
+		proportions_f.append(f_perc)
+		proportions_p.append(p_perc)
+	return np.asarray(proportions_f),np.asarray(proportions_p)
+
+
+"""
 A function to compute decision variables
 Inputs:
 	-window [pre_event, post_event] window, in ms
@@ -356,9 +386,9 @@ Returns:
 def get_trial_durations(max_duration=5000,session_range=None):
 	all_durations = []
 	if session_range is not None:
-		files = [x for x in file_lists.behavior_files if int(x[-7:-5]) in np.arange(session_range[0],session_range[1])]
+		files = [x for x in file_lists.e_behavior if int(x[-7:-5]) in np.arange(session_range[0],session_range[1])]
 	else:
-		files = file_lists.behavior_files
+		files = file_lists.e_behavior
 	for f_behavior in files:
 		all_durations.append(sa.session_trial_durations(f_behavior,max_duration=max_duration))
 	return np.concatenate(all_durations)

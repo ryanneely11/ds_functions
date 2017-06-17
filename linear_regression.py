@@ -14,10 +14,8 @@ Utilizes the trial_data dataframe to return
 an array of regressors for each trial. Regressors will be:
 -action choice
 -outcome
--Q_lower
--Q_upper
--S_upper_rewarded
--S_lower_rewarded 
+-Q_lower-Q_upper
+-S_upper_rewarded-S_lower_rewarded
 Inputs:
 	Trial_data dataframe
 Returns:
@@ -25,7 +23,7 @@ Returns:
 """
 def get_regressors(trial_data):
 	##the column names for each regressor
-	columns = ['action','outcome','q_lower','q_upper','s_upper','s_lower']
+	columns = ['action','outcome','q_diff','belief']
 	n_trials = trial_data.shape[0]
 	##using the trial data, get the Q-learning model results and the HMM results
 	fits = mf.fit_models_from_trial_data(trial_data)
@@ -34,10 +32,9 @@ def get_regressors(trial_data):
 	##now add all of the relevant data to the DataFrame
 	regressors['action'] = fits['actions']
 	regressors['outcome'] = fits['outcomes']
-	regressors['q_lower'] = fits['Qvals'][0,:]
-	regressors['q_upper'] = fits['Qvals'][1,:]
-	regressors['s_lower'] = fits['state_vals'][0,:]
-	regressors['s_upper'] = fits['state_vals'][1,:]
+	regressors['state'] = (trial_data['context']=='upper_rewarded').astype(int)
+	regressors['q_diff'] = np.abs(fits['Qvals'][1,:]-fits['Qvals'][0,:])
+	regressors['belief'] = np.abs(fits['state_vals'][0,:]-fits['state_vals'][1,:])
 	return regressors
 
 """
@@ -49,23 +46,12 @@ inputs:
 Returns:
 	p-values: the significance of each of the regressor coefficients
 """
-def lin_fit(X,y,add_constant=True):
+def lin_ftest(X,y,add_constant=True):
 	##get X in the correct shape for sklearn function
 	if len(X.shape) == 1:
 		X = X.reshape(-1,1)
 	if add_constant:
 		X = sm.add_constant(X)
-	##uncomment later to do some cross-validated accuracy testing
-	# accuracy = np.zeros(n_iter)
-	# for i in range(n_iter):
-	# 	##split the data into train and test sets
-	# 	X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.33,random_state=42)
-	# 	##now fit to the test data
-	# 	model = sm.OLS(y_train,X_train,hasconst=True)
-	# 	results = model.fit(method='pinv')
-	# 	"""
-	# 	Some accuracy testing here
-	# 	"""
 	##now get the p-value info for this model
 	model = sm.OLS(y,X,hasconst=True)
 	results = model.fit(method='pinv')
@@ -168,7 +154,7 @@ def regress_spike_matrix(X,Y,add_constant=True,n_iter=1000):
 	##basically just perform regress_timecourse for each neuron
 	##use multiprocessing to speed up the permutation testing.
 	arglist = [[X,Y[:,n,:],add_constant,n_iter] for n in range(n_neurons)]
-	pool = mp.Pool(processes=mp.cpu_count())
+	pool = mp.Pool(processes=n_neurons)
 	async_result = pool.map_async(regress_timecourse,arglist)
 	pool.close()
 	pool.join()
@@ -182,6 +168,23 @@ def regress_spike_matrix(X,Y,add_constant=True,n_iter=1000):
 	p_counts = (p_pvals <= p_thresh).sum(axis=0)
 	return f_counts,p_counts
 
+"""
+Instead of using regression to predict the firing rates of one
+neuron across trials, we can do the reverse and instead use population activity to
+predict the activity of a continuous task variable (like logistic regression
+but the without binary variables). In this case, we want to return something
+that tells us how predictive the population is for that task parameter.
+Inputs:
+	X: neural data; t-trials by n_neurons (single bin)
+	y: continuous task variable across trials
+	add_constant: True if you want to add a constant to the X data
+Returns:
 
-
-
+"""
+def lin_fit_rev(X,y,add_constant=True):
+	if add_constant:
+		X = sm.add_constant(X)
+	##get the coefficients of the real data, to use as the comparison value
+	model = sm.OLS(y,X,has_constant=True)
+	results = model.fit(method='pinv')
+	coeffs = results.params[1:]

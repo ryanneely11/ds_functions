@@ -37,13 +37,14 @@ Inputs:
 	min_rate: the min spike rate, in Hz, to accept. Units below this value will be removed.
 	max_duration: maximum allowable trial duration (ms)
 	n_iter: number of iterations to use for permutation testing
+	perc: if True, return the percentage of units rather than the counts
 Returns:
 	f_counts: number of sig units at each time point using f-test
 	p_counts: "" using permutation test
 """
 def linear_regression(f_behavior,f_ephys,smooth_method='both',smooth_width=[100,50],
 	pad=[800,800],z_score=True,trial_duration=None,min_rate=0.1,max_duration=5000,
-	n_iter=1000):
+	n_iter=1000,perc=False):
 	##first get the spike data and the trial data
 	Y,trial_data = ptr.get_trial_spikes(f_behavior,f_ephys,smooth_method=smooth_method,
 		smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=trial_duration,
@@ -52,6 +53,9 @@ def linear_regression(f_behavior,f_ephys,smooth_method='both',smooth_width=[100,
 	X = np.asarray(linr.get_regressors(trial_data))
 	##Run the regression on these data
 	f_counts,p_counts = linr.regress_spike_matrix(X,Y,add_constant=True,n_iter=n_iter)
+	if perc:
+		f_counts = f_counts/float(Y.shape[1])
+		p_counts = p_counts/float(Y.shape[1])
 	return f_counts,p_counts
 
 
