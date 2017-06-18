@@ -21,6 +21,38 @@ import model_fitting as mf
 import file_lists_unsorted as flu
 
 """
+Run logistic regression on all trials for all animals, looking at the accuracy
+	of the population for action prediction.
+Inputs:
+	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	pad: a window for pre- and post-trial padding, in ms. In other words, an x-ms period of time 
+		before lever press to consider the start of the trial, and an x-ms period of time after
+		reward to consider the end of the trial. For best results, should be a multiple of the bin size
+	z_score: if True, z-scores the array
+	min_rate: the min spike rate, in Hz, to accept. Units below this value will be removed.
+	max_duration: maximum allowable trial duration (ms)
+	n_iter: number of iterations to use for permutation testing
+"""
+def log_pop_regression(smooth_method='both',smooth_width=[100,50],pad=[2000,100],
+	z_score=True,min_rate=0.1,max_duration=5000,n_iter=10):
+	##get the median trial duration to interpolate to
+	med_duration = np.median(get_trial_durations(max_duration=max_duration,session_range=None)).astype(int)
+	accuracy = []
+	for f_behavior,f_ephys in zip(file_lists.e_behavior,file_lists.ephys_files):
+		print("Processing {}".format(f_behavior[-11:-5]))
+		try:
+			a = sa.log_pop_action(f_behavior,f_ephys,smooth_method=smooth_method,
+				smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=med_duration,
+				min_rate=min_rate,max_duration=max_duration,n_iter=n_iter)
+			accuracy.append(a)
+		except:
+			print("Regression error. Skipping...")
+	return np.asarray(accuracy)
+
+
+"""
 Run linear regression on all trials for all animals.
 Inputs:
 	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'

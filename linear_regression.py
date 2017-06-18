@@ -7,6 +7,7 @@ import model_fitting as mf
 import statsmodels.api as sm
 from sklearn.model_selection import train_test_split
 import multiprocessing as mp
+from sklearn.metrics import mean_squared_error
 
 
 """
@@ -185,7 +186,8 @@ Returns:
 def lin_fit(X,y,add_constant=True,n_iter=10):
 	if add_constant:
 		X = sm.add_constant(X)
-	errors = np.zeros(n_iter)
+	mse = np.zeros(n_iter)
+	##use cross validation to compute the mean squared error
 	for i in range(n_iter):
 		##split the data into train and test sets
 		X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.33,
@@ -194,8 +196,11 @@ def lin_fit(X,y,add_constant=True,n_iter=10):
 		model = sm.OLS(y_train,X_train,hasconst=True)
 		results = model.fit(method='pinv')
 		predictions = results.predict(X_test)
-		prediction_error = predictions-y_test
-		errors[i] = 
-		"""
-		Some accuracy testing here
-		"""
+		mse[i] = mean_squared_error(y_test,predictions)
+	##now get the % variance explained and adjusted R2 stats
+	##using the full model
+	model = sm.OLS(y,X,hasconst=True)
+	results = model.fit(method='pinv')
+	r2 = results.rsquared
+	r2_adj = results.rsquared_adj
+	

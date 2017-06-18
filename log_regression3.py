@@ -24,11 +24,13 @@ Returns:
 	llr_p: The chi-squared probability of getting a log-likelihood ratio statistic greater than llr.
 		 llr has a chi-squared distribution with degrees of freedom df_model
 """
-def log_fit(X,y,n_iter=5):
+def log_fit(X,y,add_constant=False,n_iter=10):
 	##get X in the correct shape for sklearn function
 	if len(X.shape) == 1:
 		X = X.reshape(-1,1)
 	accuracy = np.zeros(n_iter)
+	if add_constant:
+		X = sm.add_constant(X)	
 	for i in range(n_iter):
 		##split the data into train and test sets
 		X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.33,random_state=42)
@@ -51,6 +53,27 @@ def log_fit(X,y,n_iter=5):
 	results = logit.fit(method='newton',disp=False,skip_hession=True,warn_convergence=False)
 	llr_p = results.llr_pvalue
 	return accuracy.mean(),llr_p
+
+"""
+A function to do population spike activity model fitting across some
+time window/binned spikes. 
+inputs:
+	X: the independent data; could be spike rates over period.
+		in shape samples x features x time bins (ie, trials x spike rates)
+	y: the class data; should be binary. In shape (trials,)
+	n_iter: the number of times to repeat the x-validation (mean is returned)
+	add_constant: if the function should add a constant
+Returns:
+	accuracy: mean proportion of test data correctly predicted by the model
+		at each time bin
+"""
+def pop_logit(X,y,add_constant=False,n_iter=10):
+	n_bins = X.shape[2]
+	accuracy = np.zeros(n_bins)
+	for b in range(n_bins):
+		a,pval = log_fit(X[:,:,b],y,add_constant=add_constant,n_iter=n_iter)
+		accuracy[b] = a
+	return accuracy
 
 """
 A function to perform a permutation test for significance
