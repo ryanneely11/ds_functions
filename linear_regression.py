@@ -181,7 +181,10 @@ Inputs:
 	add_constant: True if you want to add a constant to the X data
 	n_iter: number of times to run the cross-validation
 Returns:
-
+	betas: beta parameters
+	r2: variance explained
+	r2_adj: adjusted r2 for multiple regressors
+	mse: mean squared error of fit; cross-validated
 """
 def lin_fit(X,y,add_constant=True,n_iter=10):
 	if add_constant:
@@ -203,4 +206,48 @@ def lin_fit(X,y,add_constant=True,n_iter=10):
 	results = model.fit(method='pinv')
 	r2 = results.rsquared
 	r2_adj = results.rsquared_adj
+	betas = results.params
+	return betas, r2, r2_adj, mse.mean()
 	
+"""
+A function that takes in a timecourse of neural activity, 
+and returns the estimate of the belief state, the r-squared, and 
+mean squared error of the estimate over that timecourse.
+Inputs:
+	X: neural data, in shape trials x neurons x timesteps
+	y: dependent data
+	add_constant: True if no constant is present in X data
+	n_iter: number of iterations for cross validation
+Returns: 
+	predictions: a n-trials x t-timepoints array showing the predicted
+		values for each trial over time
+	mse: mean squared error of the predictions over time
+	r2: ""
+	r2_adj: ""
+"""
+def fit_timecourse(X,y,add_constant=True,n_iter=10):
+	n_trials = X.shape[0]
+	n_bins = X.shape[2]
+	if add_constant:
+		n_neurons = X.shape[1]+1
+	else:
+		n_neurons = X.shape[1]
+	predictions = np.zeros((n_trials,n_bins))
+	r2 = np.zeros(n_bins)
+	r2_adj = np.zeros(n_bins)
+	mse = np.zeros(n_bins)
+	betas = np.zeros((n_neurons,n_bins))
+	for b in range(n_bins):
+		betas[:,b],r2[b],r2_adj[b],mse[b] = lin_fit(X[:,:,b],y,
+		add_constant=add_constant,n_iter=n_iter)
+	##now compute the predictions using a fixed beta
+	# betas = betas[:,-1]
+	# betas = np.mean(betas,axis=1)
+	betas = np.argmax(betas,axis=1)
+	for b in range(n_bins):
+		if add_constant:
+			x = sm.add_constant(X[:,:,b])
+		else:
+			x = X[:,:,b]
+		predictions[:,b] = np.dot(x,betas)
+	return predictions,r2,r2_adj,mse

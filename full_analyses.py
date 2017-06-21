@@ -39,17 +39,22 @@ def log_pop_regression(smooth_method='both',smooth_width=[100,50],pad=[2000,100]
 	z_score=True,min_rate=0.1,max_duration=5000,n_iter=10):
 	##get the median trial duration to interpolate to
 	med_duration = np.median(get_trial_durations(max_duration=max_duration,session_range=None)).astype(int)
-	accuracy = []
-	for f_behavior,f_ephys in zip(file_lists.e_behavior,file_lists.ephys_files):
-		print("Processing {}".format(f_behavior[-11:-5]))
-		try:
-			a = sa.log_pop_action(f_behavior,f_ephys,smooth_method=smooth_method,
-				smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=med_duration,
-				min_rate=min_rate,max_duration=max_duration,n_iter=n_iter)
-			accuracy.append(a)
-		except:
-			print("Regression error. Skipping...")
-	return np.asarray(accuracy)
+	accuracy_all = []
+	for animal in file_lists.animals:
+		accuracy = []
+		behavior_files= file_lists.split_behavior_by_animal(match_ephys=True)[animal] ##first 6 days have only one lever
+		ephys_files = file_lists.split_ephys_by_animal()[animal]
+		for f_behavior,f_ephys in zip(behavior_files,ephys_files):
+			print("Processing {}".format(f_behavior[-11:-5]))
+			try:
+				a = sa.log_pop_action(f_behavior,f_ephys,smooth_method=smooth_method,
+					smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=med_duration,
+					min_rate=min_rate,max_duration=max_duration,n_iter=n_iter)
+				accuracy.append(a)
+			except:
+				print("Regression error. Skipping...")
+		accuracy_all.append(np.asarray(accuracy))
+	return np.asarray(accuracy_all)
 
 
 """
@@ -93,37 +98,38 @@ Inputs:
 	-state_thresh: percentage for state estimation to split trials into weak or strong belief
 		states. 0.1 = top 10% of weak or strong trials are put into this catagory
 """	
-def decision_vars(animal_id,pad=[1200,120],smooth_method='both',smooth_width=[100,40],
+def decision_vars(pad=[1200,120],smooth_method='both',smooth_width=[100,40],
 	max_duration=4000,min_rate=0.1,z_score=True,trial_duration=None,state_thresh=0.1):
 	odds = []
-	trial_data = pd.DataFrame()
-	behavior_files= file_lists.split_behavior_by_animal(match_ephys=True)[animal_id] ##first 6 days have only one lever
-	ephys_files = file_lists.split_ephys_by_animal()[animal_id]
-	##make sure everything matches
-	b_days = [x[-8:-5] for x in behavior_files]
-	e_days = [x[-9:-6] for x in ephys_files]
-	assert b_days == e_days
-	##start by computing the log odds for every trial, 
-	##and also get the trial data for the trials
-	arglist = [[b,e,pad,smooth_method,smooth_width,min_rate,z_score,trial_duration,
-	max_duration] for b,e in zip(behavior_files,ephys_files)]
-	pool = mp.Pool(processes=mp.cpu_count())
-	async_result = pool.map_async(sa.mp_decision_vars,arglist)
-	pool.close()
-	pool.join()
-	##parse the multiprocessing results
-	results = async_result.get()
-	clock = 0
-	for i in range(len(results)):
-		odds.append(results[i][0])
-		td = results[i][1]
-		duration = results[i][2]
-		td['start_ts'] = td['start_ts']+clock
-		td['action_ts'] = td['action_ts']+clock
-		td['outcome_ts'] = td['action_ts']+clock
-		td['end_ts'] = td['end_ts']+clock
-		clock += duration
-		trial_data = trial_data.append(td)
+	trial_data = []
+	for animal in file_lists.animals:
+		behavior_files= file_lists.split_behavior_by_animal(match_ephys=True)[animal_id] ##first 6 days have only one lever
+		ephys_files = file_lists.split_ephys_by_animal()[animal_id]
+		##make sure everything matches
+		b_days = [x[-8:-5] for x in behavior_files]
+		e_days = [x[-9:-6] for x in ephys_files]
+		assert b_days == e_days
+		##start by computing the log odds for every trial, 
+		##and also get the trial data for the trials
+		arglist = [[b,e,pad,smooth_method,smooth_width,min_rate,z_score,trial_duration,
+		max_duration] for b,e in zip(behavior_files,ephys_files)]
+		pool = mp.Pool(processes=mp.cpu_count())
+		async_result = pool.map_async(sa.mp_decision_vars,arglist)
+		pool.close()
+		pool.join()
+		##parse the multiprocessing results
+		results = async_result.get()
+		clock = 0
+		for i in range(len(results)):
+			odds.append(results[i][0])
+			td = results[i][1]
+			duration = results[i][2]
+			td['start_ts'] = td['start_ts']+clock
+			td['action_ts'] = td['action_ts']+clock
+			td['outcome_ts'] = td['action_ts']+clock
+			td['end_ts'] = td['end_ts']+clock
+			clock += duration
+			trial_data = trial_data.append(td)
 	trial_data = trial_data.reset_index()
 	odds = np.concatenate(odds,axis=0)
 	##now, use the trial data to get HMM estimates of the hidden state
@@ -150,6 +156,59 @@ def decision_vars(animal_id,pad=[1200,120],smooth_method='both',smooth_width=[10
 	output['upper_weak_odds'] = odds[np.intersect1d(upper_idx,weak_idx),:]
 	output['lower_strong_odds'] = odds[np.intersect1d(lower_idx,strong_idx),:]
 	output['lower_weak_odds'] = odds[np.intersect1d(lower_idx,weak_idx),:]
+	return output
+
+"""
+A function to compute belief variables
+Inputs:
+	-window [pre_event, post_event] window, in ms
+	-smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	-smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	-min_rate: minimum acceptable spike rate, in Hz
+	-state_thresh: percentage for state estimation to split trials into weak or strong belief
+		states. 0.1 = top 10% of weak or strong trials are put into this catagory
+"""	
+def belief_vars(pad=[2000,100],smooth_method='both',smooth_width=[100,50],
+	max_duration=4000,min_rate=0.1,z_score=True,trial_duration=None,state_thresh=0.1):
+	predictions = []
+	mse = []
+	r2 = []
+	trial_data = []
+	confidence = []
+	strong_confidence = []
+	weak_confidence = []
+	for animal in file_lists.animals:
+		behavior_files= file_lists.split_behavior_by_animal(match_ephys=True)[animal] ##first 6 days have only one lever
+		ephys_files = file_lists.split_ephys_by_animal()[animal]
+		##make sure everything matches
+		b_days = [x[-8:-5] for x in behavior_files]
+		e_days = [x[-9:-6] for x in ephys_files]
+		assert b_days == e_days
+		##run the regression for every session
+		for f_behavior,f_ephys in zip(behavior_files,ephys_files):
+			print("processing {}".format(f_behavior[-11:-5]))
+			p,r,m,td,c = sa.lin_regress_belief(f_behavior,f_ephys,pad,smooth_method=smooth_method,
+				smooth_width=smooth_width,max_duration=max_duration,min_rate=min_rate,z_score=z_score,
+				trial_duration=trial_duration)
+			predictions.append(p)
+			r2.append(r)
+			mse.append(m)
+			confidence.append(c)
+			sort_idx = np.argsort(c) ##trial indices sorted from weak to strong belief states
+			n_split = np.ceil(state_thresh*c.size).astype(int) ##number of trials to take for each case
+			weak_idx = sort_idx[:n_split] ##the first n_split weakest trials
+			strong_idx = sort_idx[-n_split:] ##the last n_split strongest trials
+			##now get the upper and lower lever trial info
+			strong_confidence.append(p[strong_idx,:])
+			weak_confidence.append(p[weak_idx,:])
+	##set up a results dictionary
+	output = {}
+	output['confidence'] = np.concatenate(predictions,axis=0)
+	output['strong_confidence'] = np.concatenate(strong_confidence,axis=0)
+	output['weak_confidence'] = np.concatenate(weak_confidence,axis=0)
+	output['mse'] = np.concatenate(mse,axis=0)
+	output['r2'] = np.concatenate(r2,axis=0)
 	return output
 
 """

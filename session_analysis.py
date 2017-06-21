@@ -52,7 +52,7 @@ def log_pop_action(f_behavior,f_ephys,smooth_method='both',smooth_width=[100,50]
 	actions = (np.asarray(trial_data['action'])=='upper_lever').astype(int)
 	##get the action part of the spike data
 	if smooth_method=='both':
-		bin_size=smooth_width[0]
+		bin_size=smooth_width[1]
 	elif smooth_method=='bins':
 		bin_size=smooth_width
 	elif smooth_method=='gauss':
@@ -456,6 +456,7 @@ def decision_variables(f_behavior,f_ephys,pad,smooth_method='both',smooth_width=
 	session_duration = pe.get_session_duration(f_ephys)
 	return odds,trial_data,session_duration
 
+
 """
 MP implementation
 """
@@ -475,6 +476,51 @@ def mp_decision_vars(args):
 		smooth_width=smooth_width,min_rate=min_rate,z_score=z_score,trial_duration=trial_duration,
 		max_duration=max_duration)
 	return odds,trial_data,session_duration
+
+"""
+A function similar to the decision variables function that instead returns
+the linear regression estimate of confidence (strength of belief state)
+over some time window prior to action. 
+Inputs:
+	-f_behavior: path to behavior data file
+	-f_ephys: path to ephys data file
+	-window [pre_event, post_event] window, in ms
+	-smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	-smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	-min_rate: minimum acceptable spike rate, in Hz
+Returns:
+	predicted: predicted belief strength for each trial over the action window
+	trial_data: the trial_data matrix for this session
+"""
+def lin_regress_belief(f_behavior,f_ephys,pad,smooth_method='both',smooth_width=[100,50],
+	min_rate=0.1,z_score=True,trial_duration=None,max_duration=4000):
+	##get the raw data 
+	X,trial_data = ptr.get_trial_spikes(f_behavior,f_ephys,smooth_method=smooth_method,
+		smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=trial_duration,
+		max_duration=max_duration,min_rate=min_rate)
+	##only take the data from the pre-action epoch
+	epoch = 'action'
+	if epoch == 'action':
+		if smooth_method == 'bins':
+			X = X[:,:,:int(pad[0]/smooth_width)]
+		elif smooth_method == 'both':
+			X = X[:,:,:int(pad[0]/smooth_width[1])]
+		else:
+			X = X[:,:,:int(pad[0])]
+	if epoch == 'outcome':
+		if smooth_method == 'bins':
+			X = X[:,:,int(-pad[1]/smooth_width):]
+		elif smooth_method == 'both':
+			X = X[:,:,int(-pad[1]/smooth_width[1]):]
+		else:
+			X = X[:,:,int(-pad[1]):]
+	##now get the belief strength by using the HMM model
+	model_data = mf.fit_models_from_trial_data(trial_data)
+	confidence = np.abs(model_data['state_vals'][0]-model_data['state_vals'][1])
+	##now we can regress the confidence using the spike data
+	predicted,r2,r2_adj,mse = linr.fit_timecourse(X,confidence,add_constant=True,n_iter=10)
+	return predicted,r2,mse,trial_data,confidence
 
 """
 This function is designed to "standardize" a given trial. The rationale is that
