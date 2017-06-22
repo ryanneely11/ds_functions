@@ -241,9 +241,9 @@ def fit_timecourse(X,y,add_constant=True,n_iter=10):
 		betas[:,b],r2[b],r2_adj[b],mse[b] = lin_fit(X[:,:,b],y,
 		add_constant=add_constant,n_iter=n_iter)
 	##now compute the predictions using a fixed beta
-	# betas = betas[:,-1]
+	betas = betas[:,-10:].mean(axis=1)
 	# betas = np.mean(betas,axis=1)
-	betas = np.argmax(betas,axis=1)
+	# betas = np.argmax(betas,axis=1)
 	for b in range(n_bins):
 		if add_constant:
 			x = sm.add_constant(X[:,:,b])

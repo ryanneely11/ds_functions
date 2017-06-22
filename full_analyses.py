@@ -207,8 +207,8 @@ def belief_vars(pad=[2000,100],smooth_method='both',smooth_width=[100,50],
 	output['confidence'] = np.concatenate(predictions,axis=0)
 	output['strong_confidence'] = np.concatenate(strong_confidence,axis=0)
 	output['weak_confidence'] = np.concatenate(weak_confidence,axis=0)
-	output['mse'] = np.concatenate(mse,axis=0)
-	output['r2'] = np.concatenate(r2,axis=0)
+	output['mse'] = np.asarray(mse)
+	output['r2'] = np.asarray(r2)
 	return output
 
 """
