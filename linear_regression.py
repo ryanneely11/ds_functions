@@ -188,7 +188,7 @@ Returns:
 """
 def lin_fit(X,y,add_constant=True,n_iter=10):
 	if add_constant:
-		X = sm.add_constant(X)
+		X = sm.add_constant(X,has_constant='add')
 	mse = np.zeros(n_iter)
 	##use cross validation to compute the mean squared error
 	for i in range(n_iter):
@@ -227,26 +227,31 @@ Returns:
 """
 def fit_timecourse(X,y,add_constant=True,n_iter=10):
 	n_trials = X.shape[0]
+	# print("n_trials={}".format(n_trials))
 	n_bins = X.shape[2]
+	# print("n_bins={}".format(n_bins))
 	if add_constant:
 		n_neurons = X.shape[1]+1
 	else:
 		n_neurons = X.shape[1]
+	# print("n_neurons={}".format(n_neurons))
 	predictions = np.zeros((n_trials,n_bins))
 	r2 = np.zeros(n_bins)
 	r2_adj = np.zeros(n_bins)
 	mse = np.zeros(n_bins)
 	betas = np.zeros((n_neurons,n_bins))
+	# print("shape of betas={}".format(betas.shape))
 	for b in range(n_bins):
+		# print("bin#{}".format(b))
 		betas[:,b],r2[b],r2_adj[b],mse[b] = lin_fit(X[:,:,b],y,
 		add_constant=add_constant,n_iter=n_iter)
 	##now compute the predictions using a fixed beta
-	betas = betas[:,-10:].mean(axis=1)
+	# betas = betas[:,-10:].mean(axis=1)
 	# betas = np.mean(betas,axis=1)
-	# betas = np.argmax(betas,axis=1)
+	betas = np.argmax(betas,axis=1)
 	for b in range(n_bins):
 		if add_constant:
-			x = sm.add_constant(X[:,:,b])
+			x = sm.add_constant(X[:,:,b],has_constant='add')
 		else:
 			x = X[:,:,b]
 		predictions[:,b] = np.dot(x,betas)

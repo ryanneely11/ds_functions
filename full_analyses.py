@@ -77,13 +77,20 @@ def linear_regression(smooth_method='both',smooth_width=[100,50],pad=[800,800],
 	med_duration = np.median(get_trial_durations(max_duration=max_duration,session_range=None)).astype(int)
 	proportions_f = []
 	proportions_p = []
-	for f_behavior,f_ephys in zip(file_lists.e_behavior,file_lists.ephys_files):
-		print("Processing {}".format(f_behavior[-11:-5]))
-		f_perc,p_perc = sa.linear_regression(f_behavior,f_ephys,smooth_method=smooth_method,
-			smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=med_duration,
-			min_rate=min_rate,max_duration=max_duration,n_iter=n_iter,perc=True)
-		proportions_f.append(f_perc)
-		proportions_p.append(p_perc)
+	for animal in file_lists.animals:
+		behavior_files= file_lists.split_behavior_by_animal(match_ephys=True)[animal][-4:]
+		ephys_files = file_lists.split_ephys_by_animal()[animal][-4:]
+		f_perc = []
+		p_perc = []
+		for f_behavior,f_ephys in zip(behavior_files,ephys_files):
+			print("Processing {}".format(f_behavior[-11:-5]))
+			f_p,p_p = sa.linear_regression(f_behavior,f_ephys,smooth_method=smooth_method,
+				smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=med_duration,
+				min_rate=min_rate,max_duration=max_duration,n_iter=n_iter,perc=True)
+			f_perc.append(f_p)
+			p_perc.append(p_p)
+		proportions_f.append(np.asarray(f_perc))
+		proportions_p.append(np.asarray(p_perc))
 	return np.asarray(proportions_f),np.asarray(proportions_p)
 
 
@@ -172,15 +179,17 @@ Inputs:
 def belief_vars(pad=[2000,100],smooth_method='both',smooth_width=[100,50],
 	max_duration=4000,min_rate=0.1,z_score=True,trial_duration=None,state_thresh=0.1):
 	predictions = []
-	mse = []
-	r2 = []
+	MSE = []
+	R2 = []
 	trial_data = []
 	confidence = []
 	strong_confidence = []
 	weak_confidence = []
 	for animal in file_lists.animals:
-		behavior_files= file_lists.split_behavior_by_animal(match_ephys=True)[animal] ##first 6 days have only one lever
+		behavior_files= file_lists.split_behavior_by_animal(match_ephys=True)[animal]
 		ephys_files = file_lists.split_ephys_by_animal()[animal]
+		mse = []
+		r2 = []
 		##make sure everything matches
 		b_days = [x[-8:-5] for x in behavior_files]
 		e_days = [x[-9:-6] for x in ephys_files]
@@ -202,13 +211,15 @@ def belief_vars(pad=[2000,100],smooth_method='both',smooth_width=[100,50],
 			##now get the upper and lower lever trial info
 			strong_confidence.append(p[strong_idx,:])
 			weak_confidence.append(p[weak_idx,:])
+		MSE.append(np.asarray(mse))
+		R2.append(np.asarray(R2))
 	##set up a results dictionary
 	output = {}
 	output['confidence'] = np.concatenate(predictions,axis=0)
 	output['strong_confidence'] = np.concatenate(strong_confidence,axis=0)
 	output['weak_confidence'] = np.concatenate(weak_confidence,axis=0)
-	output['mse'] = np.asarray(mse)
-	output['r2'] = np.asarray(r2)
+	output['mse'] = np.asarray(MSE)
+	output['r2'] = np.asarray(R2)
 	return output
 
 """
