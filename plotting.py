@@ -4,6 +4,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import ArrowStyle
+import matplotlib as mpl
 import matplotlib.gridspec as gridspec
 import parse_logs as pl
 import parse_ephys as pe
@@ -24,6 +25,51 @@ import tensortools as tt
 from tensor_analysis import align_factors, _validate_factors
 import model_fitting as mf
 import file_lists
+import matplotlib.cm as cm
+
+"""
+A function to plot belief states VS the outcome of the last trial
+"""
+def plot_belief_vs_outcomes(max_duration=5000):
+	rew,unrew = fa.belief_vs_outcomes(max_duration=max_duration)
+	n_animals = rew.shape[0]
+	rew_by_animal = np.zeros(n_animals)
+	unrew_by_animal = np.zeros(n_animals)
+	for i in range(n_animals):
+		r = []
+		u = []
+		for s in range(rew[i].shape[0]):
+			r.append(rew[i][s].mean())
+			u.append(unrew[i][s].mean())
+		rew_by_animal[i] = mean(r)
+		unrew_by_animal[i] = mean(u)
+	means = np.array([rew_by_animal.mean(),unrew_by_animal.mean()])
+	sems = np.array([stats.sem(rew_by_animal),stats.sem(unrew_by_animal)])
+	fig,ax2 = plt.subplots(1)
+	x = np.array([1,2])
+	xerr = np.ones(2)*0.1
+	for i in range(rew_by_animal.size):
+		ax2.plot(x[0],rew_by_animal[i],color='green',linewidth=2,marker='o')
+		ax2.plot(x[1],unrew_by_animal[i],color='k',linewidth=2,marker='x')
+	ax2.errorbar(x,means,yerr=sems,xerr=xerr,fmt='none',ecolor='k',capthick=2,elinewidth=2)
+	plt.xticks(x,['Rewarded','Unrewarded'])
+	for ticklabel in ax2.get_xticklabels():
+		ticklabel.set_fontsize(14)
+	for ticklabel in ax2.get_yticklabels():
+		ticklabel.set_fontsize(14)
+	# ax2.set_ylabel("Percent correct",fontsize=14)
+	ax2.set_xlabel("Outcome of last trial",fontsize=14)
+	ax2.set_ylabel("Mean belief strength",fontsize=14)
+	ax2.set_title("Outcome VS belief",fontsize=14)
+	tval,pval = stats.ttest_rel(rew_by_animal,unrew_by_animal)
+	ax2.text(1.5,0.15,"p={0:.4f}".format(pval))
+	print("mean rewarded="+str(rew_by_animal.mean()))
+	print("mean last 4="+str(unrew_by_animal.mean()))
+	print("pval="+str(pval))
+	print("tval="+str(tval))
+	plt.tight_layout()
+
+
 
 """
 A function to plot examplar units from logistic regression, from one session at a time.
@@ -1931,3 +1977,21 @@ def last_vals(arr,n_vals):
 		dataseg = dataseg[~np.isnan(dataseg)]
 		results[p,:] = dataseg[-n_vals:]
 	return results
+
+
+
+"""
+A helper function to do color mapping (built for clustering
+plots)
+inputs:
+	vmin: the minimum value in the range
+	vmax: the max value in the range
+	val: the val to map with this mapping
+	cmap: which mpl color map to use
+Returns:
+	color: the color of the given point in this color mapping
+"""
+def c_map(vmin,vmax,val,cmap=cm.jet):
+	norm = mpl.colors.Normalize(vmin=vmin,vmax=vmax)
+	color = cm.ScalarMappable(norm=norm,cmap=cmap)
+	return color.to_rgba(val)

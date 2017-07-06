@@ -165,6 +165,93 @@ def decision_vars(pad=[1200,120],smooth_method='both',smooth_width=[100,40],
 	output['lower_weak_odds'] = odds[np.intersect1d(lower_idx,weak_idx),:]
 	return output
 
+
+"""
+A function to compute decision variables, similar to the other function,
+but this one splits trials according to whether the last outcome was rewarded or unrewarded.
+Inputs:
+	-window [pre_event, post_event] window, in ms
+	-smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	-smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	-min_rate: minimum acceptable spike rate, in Hz
+	-state_thresh: percentage for state estimation to split trials into weak or strong belief
+		states. 0.1 = top 10% of weak or strong trials are put into this catagory
+"""	
+def decision_vars2(pad=[1200,120],smooth_method='both',smooth_width=[100,40],
+	max_duration=4000,min_rate=0.1,z_score=True,trial_duration=None):
+	odds = []
+	trial_data = pd.DataFrame()
+	for animal in file_lists.animals:
+		behavior_files= file_lists.split_behavior_by_animal(match_ephys=True)[animal] ##first 6 days have only one lever
+		ephys_files = file_lists.split_ephys_by_animal()[animal]
+		##make sure everything matches
+		b_days = [x[-8:-5] for x in behavior_files]
+		e_days = [x[-9:-6] for x in ephys_files]
+		assert b_days == e_days
+		##start by computing the log odds for every trial, 
+		##and also get the trial data for the trials
+		arglist = [[b,e,pad,smooth_method,smooth_width,min_rate,z_score,trial_duration,
+		max_duration] for b,e in zip(behavior_files,ephys_files)]
+		pool = mp.Pool(processes=mp.cpu_count())
+		async_result = pool.map_async(sa.mp_decision_vars,arglist)
+		pool.close()
+		pool.join()
+		##parse the multiprocessing results
+		results = async_result.get()
+		clock = 0
+		for i in range(len(results)):
+			odds.append(results[i][0])
+			td = results[i][1]
+			duration = results[i][2]
+			td['start_ts'] = td['start_ts']+clock
+			td['action_ts'] = td['action_ts']+clock
+			td['outcome_ts'] = td['action_ts']+clock
+			td['end_ts'] = td['end_ts']+clock
+			clock += duration
+			trial_data = trial_data.append(td)
+	trial_data = trial_data.reset_index()
+	odds = np.concatenate(odds,axis=0)
+	##now, use the trial data to split trials according to what the outcome of the last trial was
+	last_rewarded_idx,last_unrewarded_idx = ptr.split_by_last_outcome(trial_data)
+	##now equalize the numbers of trials between the two conditions
+	least_trials = min(len(last_rewarded_idx),len(last_unrewarded_idx))
+	last_rewarded_idx = np.random.choice(last_rewarded_idx,least_trials,replace=False)
+	last_unrewarded_idx = np.random.choice(last_unrewarded_idx,least_trials,replace=False)
+	##now get the upper and lower lever trial info
+	upper_idx = np.where(trial_data['action']=='upper_lever')[0]
+	lower_idx = np.where(trial_data['action']=='lower_lever')[0]
+	##set up a results dictionary
+	output = {}
+	output['odds'] = odds
+	output['upper_odds'] = odds[upper_idx,:]
+	output['lower_odds'] = odds[lower_idx,:]
+	output['last_unrewarded_odds'] = odds[last_unrewarded_idx,:]
+	output['last_rewarded_odds'] = odds[last_rewarded_idx,:]
+	output['upper_unrewarded_odds'] = odds[np.intersect1d(upper_idx,last_unrewarded_idx),:]
+	output['upper_rewarded_odds'] = odds[np.intersect1d(upper_idx,last_rewarded_idx),:]
+	output['lower_unrewarded_odds'] = odds[np.intersect1d(lower_idx,last_unrewarded_idx),:]
+	output['lower_rewarded_odds'] = odds[np.intersect1d(lower_idx,last_rewarded_idx),:]
+	return output
+
+"""
+A function to compare belief vars and last outcome
+"""
+def belief_vs_outcomes(max_duration=5000):
+	Rew = []
+	Unrew = []
+	for animal in file_lists.animals:
+		rew = []
+		unrew = []
+		behavior_files = file_lists.split_behavior_by_animal(match_ephys=False)[animal][6:] ##first 6 days have only one lever
+		for f_behavior in behavior_files:
+			last_rew_belief,last_unrew_belief = sa.belief_vs_last_rewarded(f_behavior,max_duration)
+			rew.append(last_rew_belief)
+			unrew.append(last_unrew_belief)
+		Rew.append(np.asarray(rew))
+		Unrew.append(np.asarray(unrew))
+	return np.asarray(Rew),np.asarray(Unrew)
+
 """
 A function to compute belief variables
 Inputs:

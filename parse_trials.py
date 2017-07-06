@@ -854,3 +854,24 @@ def get_session_number(fname):
 	##now get the position of this file in the full list
 	return ani_files.index(fname)
 
+"""
+A function to split trials up according to what happened on the previous trial;
+ie if the previous trial was rewarded or unrewarded. 
+Inputs:
+	trial_data DataFrame
+Returns:
+	prev_rewarded: index of trials where the previous trial was rewarded
+	prev_unrewarded: intex of trials where the previous trial was unrewarded
+"""
+def split_by_last_outcome(trial_data):
+	prev_unrewarded_idx = np.where(trial_data['outcome']=='unrewarded_poke')[0] + 1
+	prev_rewarded_idx = np.where(trial_data['outcome']=='rewarded_poke')[0] + 1
+	##make sure we aren't including a trial extra
+	if prev_rewarded_idx.max() == len(trial_data):
+		prev_rewarded_idx = prev_rewarded_idx[:-1]
+	else:
+		prev_unrewarded_idx = prev_unrewarded_idx[:-1]
+	return prev_rewarded_idx,prev_unrewarded_idx
+
+
+

@@ -522,6 +522,31 @@ def lin_regress_belief(f_behavior,f_ephys,pad,smooth_method='both',smooth_width=
 	predicted,r2,r2_adj,mse = linr.fit_timecourse(X,confidence,add_constant=True,n_iter=10)
 	return predicted,r2,mse,trial_data,confidence
 
+
+"""
+A function to compare the "belief strength" of a given trial based on hidden markov
+model data to whether or not the last trial was rewarded.
+Inputs:
+	f_behavior: data file
+	max_duration: the ceiling of trial durations to consider valid
+Returns:
+"""
+def belief_vs_last_rewarded(f_behavior,max_duration=5000):
+	##start by getting the trial data for this session
+	trial_data = ptr.get_full_trials(f_behavior,max_duration=max_duration)
+	##now determine which trials were rewarded or unrewarded
+	last_rew_idx,last_unrew_idx = ptr.split_by_last_outcome(trial_data)
+	##compute the hidden markov model 
+	model_data = mf.fit_models_from_trial_data(trial_data)
+	##return the confidence, belief states
+	state_vars = model_data['state_vals']
+	##now find the trial indices of the weak and strong trials
+	belief = np.abs(state_vars[0]-state_vars[1])
+	##split into last rewarded and last unrewarded belief states
+	last_rew_belief = belief[last_rew_idx]
+	last_unrew_belief = belief[last_unrew_idx]
+	return last_rew_belief,last_unrew_belief
+
 """
 This function is designed to "standardize" a given trial. The rationale is that
 many sessions have a similar structure, and if we standardize all sessions, we can
