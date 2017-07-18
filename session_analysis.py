@@ -18,6 +18,8 @@ import pandas as pd
 import model_fitting as mf
 from sklearn import linear_model
 import linear_regression as linr
+from scipy.stats import pearsonr
+import tensor_analysis as ta
 save_root = os.path.join(file_lists.save_loc,"LogisticRegression/80gauss_40ms_bins")
 
 """
@@ -546,6 +548,63 @@ def belief_vs_last_rewarded(f_behavior,max_duration=5000):
 	last_rew_belief = belief[last_rew_idx]
 	last_unrew_belief = belief[last_unrew_idx]
 	return last_rew_belief,last_unrew_belief
+
+"""
+A function to compare trial factors from tensor analysis and belief estimations from HMM
+Inputs:
+	f_behavior: file path to behavior data
+	f_ephys: file path to ephys data
+
+"""
+def tensors_v_belief(f_behavior,f_ephys,smooth_method='both',smooth_width=[80,40],
+	pad=[1200,1200],trial_duration=None,min_rate=0,max_duration=3000,
+	n_components=4,epoch='outcome',verbose=True):
+	##start by computing the tensors
+	model,info,trial_data = ta.run_tensor(f_behavior,f_ephys,smooth_method=smooth_method,
+		smooth_width=smooth_width,pad=pad,z_score=True,trial_duration=trial_duration,
+		min_rate=min_rate,max_duration=max_duration,n_components=n_components,epoch=epoch)
+	##now compute the HMM
+	hmm = mf.fit_models_from_trial_data(trial_data)
+	##now compute the belief strength
+	belief = np.abs(hmm['state_vals'][0]-hmm['state_vals'][1])
+	##finally compute the strongest correlation for the trial factors
+	trial_factors = model[2]
+	ccs = np.zeros(n_components)
+	pvals = np.zeros(n_components)
+	for i in range(n_components):
+		ccs[i],pvals[i] = pearsonr(belief,trial_factors[:,i])
+	##find the trial factor with the most significant correlation to belief
+	best_idx = np.argmin(pvals)
+	cc = ccs[best_idx]
+	pval = pvals[best_idx]
+	trial_factor = trial_factors[:,best_idx]
+	if verbose:
+		print(f_behavior[-11:-5])
+		print("CC = {}".format(cc))
+		print("P = {}".format(pval))
+	return cc,pval,trial_factor,belief
+
+"""multiprocessing impementation"""
+def mp_tensors_v_belief(args):
+	##parse args
+	f_behavior = args[0]
+	f_ephys = args[1]
+	smooth_method = args[2]
+	smooth_width = args[3]
+	pad = args[4]
+	trial_duration = args[5]
+	min_rate = args[6]
+	max_duration = args[7]
+	n_components = args[8]
+	epoch = args[9]
+	cc,pval,trial_factor,belief = tensors_v_belief(f_behavior,f_ephys,
+		smooth_method=smooth_method,smooth_width=smooth_width,pad=pad,
+		trial_duration=trial_duration,min_rate=min_rate,
+		max_duration=max_duration,n_components=n_components,epoch=epoch,verbose=False)
+	print(f_behavior[-11:-5])
+	print("CC = {}".format(cc))
+	print("P = {}".format(pval))
+	return cc,pval,trial_factor,belief
 
 """
 This function is designed to "standardize" a given trial. The rationale is that

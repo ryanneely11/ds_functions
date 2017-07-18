@@ -20,6 +20,51 @@ import log_regression2 as lr2
 import model_fitting as mf
 import file_lists_unsorted as flu
 
+
+"""
+Compare tensor analysis trial factors and belief states
+Inputs:	
+	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	pad: a window for pre- and post-trial padding, in ms. In other words, an x-ms period of time 
+		before lever press to consider the start of the trial, and an x-ms period of time after
+		reward to consider the end of the trial. For best results, should be a multiple of the bin size
+	trial_duration: specifies the trial length (in ms) to squeeze trials into. If None, the function uses
+		the median trial length over the trials in the file
+	min_rate: the min spike rate, in Hz, to accept. Units below this value will be removed.
+	max_duration: maximum allowable trial duration (ms)
+	n_components: the number of components to fit
+	epoch: if 'action'; just uses the pre-action window defined in pad. if 'outcome', uses the 
+		post-reward window. If None, uses full trial data.
+Returns:
+	cc: correlation coefficient of the two signals (absolute value)
+	belief: belief estimation from HMM
+	trial_factor: the trial factor that best captures the belief state
+"""
+def tensors_v_belief(smooth_method='both',smooth_width=[80,40],pad=[1200,1200],
+	trial_duration=None,min_rate=0,max_duration=3000,n_components=4,epoch='outcome'):
+	datafile = "/Volumes/Untitled/Ryan/DS_animals/results/tensor_analysis/1200ms_post_4factors.hdf5"
+	f_out = h5py.File(datafile,'a')
+	f_out.close()
+	##create an argument list
+	arglist = [[f_behavior,f_ephys,smooth_method,smooth_width,pad,trial_duration,
+				min_rate,max_duration,n_components,epoch] for f_behavior,f_ephys in zip(file_lists.e_behavior,
+					file_lists.ephys_files)]
+	for args in arglist:
+		f_out = h5py.File(datafile,'a')
+		try:
+			cc,pval,trial_factor,belief = sa.mp_tensors_v_belief(args)
+			group = f_out.create_group(args[0][-11:-5])
+			group.create_dataset('cc',data=np.array([cc]))
+			group.create_dataset("pval",data=np.array([pval]))
+			group.create_dataset("trial_factor",data=trial_factor)
+			group.create_dataset("belief",data=belief)
+		except:
+			print("Can't decompose {}".format(args[0][-11:-5]))
+		f_out.close()
+	print("Done")
+
 """
 Run logistic regression on all trials for all animals, looking at the accuracy
 	of the population for action prediction.
@@ -179,7 +224,7 @@ Inputs:
 		states. 0.1 = top 10% of weak or strong trials are put into this catagory
 """	
 def decision_vars2(pad=[1200,120],smooth_method='both',smooth_width=[100,40],
-	max_duration=4000,min_rate=0.1,z_score=True,trial_duration=None):
+	max_duration=4000,min_rate=0.1,z_score=True,trial_duration=None,state_thresh=None):
 	odds = []
 	trial_data = pd.DataFrame()
 	for animal in file_lists.animals:

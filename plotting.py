@@ -26,6 +26,30 @@ from tensor_analysis import align_factors, _validate_factors
 import model_fitting as mf
 import file_lists
 import matplotlib.cm as cm
+from sklearn.manifold import TSNE
+
+"""
+A function to plot tsne visualizations of trial data color coded
+according to belief states
+"""
+def plot_tsne(f_behavior,f_ephys,smooth_method='both',smooth_width=[80,40],
+	pad=400):
+	##start by getting the trial data and spike data
+	X_trials,trial_data = ptr.get_trial_spikes(f_behavior,f_ephys,
+		smooth_method='both',smooth_width=[80,40],pad=[pad,pad],z_score=True)
+	##now calculate the belief states
+	model_data = mf.fit_models_from_trial_data(trial_data)
+	belief = abs(model_data['state_vals'][0]-model_data['state_vals'][1])
+	pre_idx = int(pad/smooth_width[1])
+	X = X_trials[:,:,0:pre_idx].mean(axis=2)
+	tsne = TSNE(n_components=2,verbose=1,perplexity=20,n_iter=300)
+	result = tsne.fit_transform(X)
+	vmax = belief.max()
+	vmin = belief.min()
+	fig,ax = plt.subplots(1)
+	for i in range(belief.shape[0]):
+ 		ax.plot(result[i,0],result[i,1],marker='o',fillstyle='full',
+		color=c_map(vmin,vmax,belief[i]))
 
 """
 A function to plot belief states VS the outcome of the last trial
@@ -41,17 +65,18 @@ def plot_belief_vs_outcomes(max_duration=5000):
 		for s in range(rew[i].shape[0]):
 			r.append(rew[i][s].mean())
 			u.append(unrew[i][s].mean())
-		rew_by_animal[i] = mean(r)
-		unrew_by_animal[i] = mean(u)
+		rew_by_animal[i] = np.mean(r)
+		unrew_by_animal[i] = np.mean(u)
 	means = np.array([rew_by_animal.mean(),unrew_by_animal.mean()])
 	sems = np.array([stats.sem(rew_by_animal),stats.sem(unrew_by_animal)])
 	fig,ax2 = plt.subplots(1)
-	x = np.array([1,2])
+	x = np.array([0,1])
 	xerr = np.ones(2)*0.1
+	width=0.5
+	bars = ax2.bar(x,means,width,color =['green','black'],yerr=sems,ecolor='k',alpha = 0.8)
 	for i in range(rew_by_animal.size):
-		ax2.plot(x[0],rew_by_animal[i],color='green',linewidth=2,marker='o')
-		ax2.plot(x[1],unrew_by_animal[i],color='k',linewidth=2,marker='x')
-	ax2.errorbar(x,means,yerr=sems,xerr=xerr,fmt='none',ecolor='k',capthick=2,elinewidth=2)
+		ax2.plot(x[0],rew_by_animal[i],color='k',linewidth=2,marker='o',markersize=15)
+		ax2.plot(x[1],unrew_by_animal[i],color='k',linewidth=2,marker='x',markersize=15)
 	plt.xticks(x,['Rewarded','Unrewarded'])
 	for ticklabel in ax2.get_xticklabels():
 		ticklabel.set_fontsize(14)
@@ -1160,7 +1185,7 @@ def plot_decision_vars(pad=[2000,120],smooth_method='both',smooth_width=[100,40]
 	upper_weak_odds = []
 	lower_weak_odds = []
 	for animal in file_lists.animals:
-		data = fa.decision_vars(animal,pad=pad,smooth_method=smooth_method,smooth_width=smooth_width,
+		data = fa.decision_vars2(pad=pad,smooth_method=smooth_method,smooth_width=smooth_width,
 			max_duration=max_duration,min_rate=min_rate,z_score=z_score,trial_duration=trial_duration,
 			state_thresh=state_thresh)
 		upper_odds.append(data['upper_odds'])
