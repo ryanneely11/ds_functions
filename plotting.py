@@ -12,7 +12,7 @@ import parse_timestamps as pt
 import parse_trials as ptr
 import full_analyses as fa
 import h5py
-import scipy.stats
+from scipy.stats import zscore
 import scipy as sp
 import session_analysis as sa
 import matplotlib as ml
@@ -27,6 +27,141 @@ import model_fitting as mf
 import file_lists
 import matplotlib.cm as cm
 from sklearn.manifold import TSNE
+from scipy.stats import pearsonr
+import tensor_analysis as ta
+
+"""
+Plots tensors vs belief
+"""
+def plot_tensors_v_belief(datafile):
+	f = h5py.File(datafile,'r')
+	##Let's look at these data by animal
+	animals = file_lists.animals
+	n_animals = len(animals)
+	mean_ccs = []
+	mean_ccs_shuff = []
+	n_sig = []
+	n_totals = []
+	n_sig_shuff = []
+	best_beliefs = []
+	best_tfs = []
+	for animal in animals:
+		sessions = [x for x in list(f) if x.startswith(animal)]
+		n_sessions = len(sessions)
+		pvals = []
+		ccs = []
+		beliefs = []
+		trial_factors = []
+		for session in sessions:
+			pvals.append(np.asarray(f[session]['pval']))
+			ccs.append(np.asarray(f[session]['cc']))
+			beliefs.append(np.asarray(f[session]['belief']))
+			trial_factors.append(np.asarray(f[session]['trial_factor']))
+		pvals = np.asarray(pvals).squeeze()
+		ccs = np.abs(np.asarray(ccs).squeeze())
+		##now, we want to shuffle the indices and re-run the pearsonr test with 
+		##shuffled comparisons
+		pvals_shuff = np.zeros(n_sessions)
+		ccs_shuff = np.zeros(n_sessions)
+		belief_idx = np.random.permutation(np.arange(n_sessions))
+		for i in range(n_sessions):
+			idx = belief_idx[i]
+			belief = beliefs[idx]
+			trial_factor = trial_factors[i]
+			##equalize the lengths
+			min_trials = np.min([belief.size,trial_factor.size])
+			belief = belief[0:min_trials]
+			trial_factor = trial_factor[0:min_trials]
+			##now do the stats
+			ccs_shuff[i],pvals_shuff[i] = pearsonr(belief,trial_factor)
+		##now do the comparisons
+		n_totals.append(n_sessions)
+		n_sig.append(np.where(pvals<=0.05)[0].size)
+		n_sig_shuff.append(np.where(pvals_shuff<=0.05)[0].size)
+		mean_ccs.append(ccs.mean())
+		mean_ccs_shuff.append(np.abs(ccs_shuff).mean())
+		best_idx = np.argmax(ccs)
+		best_beliefs.append(beliefs[best_idx])
+		best_tfs.append(trial_factors[best_idx])
+	f.close()
+	mean_ccs = np.asarray(mean_ccs)
+	mean_ccs_shuff = np.asarray(mean_ccs_shuff)
+	p_sig = np.asarray(n_sig)/np.asarray(n_totals)
+	p_sig_shuff = np.asarray(n_sig_shuff)/np.asarray(n_totals)
+	##NOW we can actually plot this
+	##start with bar charts of ccs and perc sig
+	means = np.array([p_sig_shuff.mean(),p_sig.mean()])
+	sems = np.array([stats.sem(p_sig_shuff),stats.sem(p_sig)])
+	data = np.vstack((p_sig_shuff,p_sig))
+	tval,pval = stats.ttest_rel(p_sig,p_sig_shuff)
+	labels = np.array(['shuffled','matched'])
+	idx = np.array([0,1])
+	fig,ax = plt.subplots(1)
+	yerr = sems
+	xerr = np.ones(2)*0.1
+	width=0.5
+	# for i in range(rew.shape[1]):
+	# 	ax2.plot(xr,rew[:,i],color='k',linewidth=2,marker='o')
+	bars = ax.bar(idx,means,width,color = ['k','r'],yerr = sems,ecolor = 'k',alpha=0.75)
+	for i in range(n_animals):
+		ax.plot(idx,data[:,i],color='k',marker='o',linewidth=2,linestyle='none')
+	# ax2.errorbar(err_x,means,yerr=yerr,xerr=xerr,fmt='none',ecolor='k',capthick=2,elinewidth=2)
+	plt.xticks(np.arange(0,2),labels)
+	ax.set_ylabel("Percent significant",fontsize=14)
+	for ticklabel in ax.get_xticklabels():
+		ticklabel.set_fontsize(14)
+	for ticklabel in ax.get_yticklabels():
+		ticklabel.set_fontsize(14)
+	# ax.set_xlim(-0.3,1.3)
+	# ax.set_ylim(0,12)
+	ax.set_title("Correlation of belief and trial factors",fontsize=14)
+	print("pval = "+str(pval))
+	print("tval = "+str(tval))
+	print("mean p sig = "+str(means[1]))
+	print("mean shuffled = "+str(means[0]))
+	##start with bar charts of ccs and perc sig
+	means = np.array([mean_ccs_shuff.mean(),mean_ccs.mean()])
+	sems = np.array([stats.sem(mean_ccs_shuff),stats.sem(mean_ccs)])
+	data = np.vstack((mean_ccs_shuff,mean_ccs))
+	tval,pval = stats.ttest_rel(mean_ccs,mean_ccs_shuff)
+	labels = np.array(['shuffled','matched'])
+	idx = np.array([0,1])
+	fig,ax = plt.subplots(1)
+	yerr = sems
+	xerr = np.ones(2)*0.1
+	width=0.5
+	# for i in range(rew.shape[1]):
+	# 	ax2.plot(xr,rew[:,i],color='k',linewidth=2,marker='o')
+	bars = ax.bar(idx,means,width,color = ['k','r'],yerr = sems,ecolor = 'k',alpha=0.75)
+	for i in range(n_animals):
+		ax.plot(idx,data[:,i],color='k',marker='o',linewidth=2,linestyle='none')
+	# ax2.errorbar(err_x,means,yerr=yerr,xerr=xerr,fmt='none',ecolor='k',capthick=2,elinewidth=2)
+	plt.xticks(np.arange(0,2),labels)
+	ax.set_ylabel("Mean pearson CC",fontsize=14)
+	for ticklabel in ax.get_xticklabels():
+		ticklabel.set_fontsize(14)
+	for ticklabel in ax.get_yticklabels():
+		ticklabel.set_fontsize(14)
+	# ax.set_xlim(-0.3,1.3)
+	# ax.set_ylim(0,12)
+	ax.set_title("Correlation of belief and trial factors",fontsize=14)
+	print("pval = "+str(pval))
+	print("tval = "+str(tval))
+	print("mean p sig = "+str(means[1]))
+	print("mean shuffled = "+str(means[0]))
+	##finally plot an example of good correlation
+	fig,ax = plt.subplots(1)
+	ax.plot(zscore(best_beliefs[1]),color='k',linewidth=2,linestyle='dashed',label='belief')
+	ax.plot(-zscore(best_tfs[1]),color='r',linewidth=2,label='trial factor')
+	ax.set_xlabel("Trials",fontsize=14)
+	ax.set_ylabel("Normalized value",fontsize=14)
+	ax.set_title("Example session",fontsize=14)
+	cc,pval = pearsonr(best_beliefs[1],-best_tfs[1])
+	ax.text(5,-2,"CC={}".format(cc))
+	ax.text(5,-2.5,"P={}".format(pval))
+	ax.legend()
+
+
 
 """
 A function to plot tsne visualizations of trial data color coded
@@ -151,7 +286,7 @@ def plot_example_log_units(f_data,sig_level=0.05,test_type='pvals',accuracy_thre
 A function to plot logistic regression data for all sessions, looking specifically
 at whether units encode more than one parameter.
 """
-def plot_log_units_all2(dir_list=None,session_range=None,sig_level=0.05,test_type='llr_pval',cmap='brg'):
+def plot_log_units_all2(dir_list=None,session_range=None,sig_level=0.05,test_type='llr_pvals',cmap='brg'):
 	##coding this in just to save time
 	if dir_list == None:
 		dir_list = [
@@ -248,6 +383,7 @@ def plot_log_units_all2(dir_list=None,session_range=None,sig_level=0.05,test_typ
 	ax2.set_xticklabels(list(bar_dict),rotation=45,weight='bold',fontsize=10)
 	ax2.set_ylabel('Percent of significant units',fontsize=14,weight='bold')
 	ax2.set_title("Proportion of units encoding task params",fontsize=14,weight='bold')
+	print("total units encoding one param = {}".format(bar_dict['Action\nonly']+bar_dict['Context\nonly']+bar_dict['Outcome\nonly']))
 
 
 
@@ -258,9 +394,9 @@ def plot_log_units_all(dir_list=None,session_range=None,sig_level=0.05,test_type
 	##coding this in just to save time
 	if dir_list == None:
 		dir_list = [
-		r"D:\Ryan\DS_animals\results\LogisticRegression\80gauss_40ms_bins\S1",
-		r"D:\Ryan\DS_animals\results\LogisticRegression\80gauss_40ms_bins\S2",
-		r"D:\Ryan\DS_animals\results\LogisticRegression\80gauss_40ms_bins\S3"
+		"/Volumes/Untitled/Ryan/DS_animals/results/LogisticRegression/80gauss_40ms_bins/S1",
+		"/Volumes/Untitled/Ryan/DS_animals/results/LogisticRegression/80gauss_40ms_bins/S2",
+		"/Volumes/Untitled/Ryan/DS_animals/results/LogisticRegression/80gauss_40ms_bins/S3"
 		]
 	##get the data
 	results = fa.analyze_log_regressions(dir_list,session_range=session_range,sig_level=sig_level,
@@ -503,7 +639,7 @@ def plot_volatility_all(save=False):
 	surgery_break[:] = np.nan
 	pre_surgery = data[:,0:8]
 	post_surgery = data[:,8:]
-	data = np.concatenate((pre_surgery,surgery_break,post_surgery),axis=1)
+	data = 1-np.concatenate((pre_surgery,surgery_break,post_surgery),axis=1)
 	##get the mean and std error
 	mean = np.nanmean(data,axis=0)
 	err = np.nanstd(data,axis=0)/np.sqrt(data.shape[0])
@@ -566,7 +702,7 @@ def plot_persistence_all(save=False):
 	surgery_break[:] = np.nan
 	pre_surgery = data[:,0:8]
 	post_surgery = data[:,8:]
-	data = np.concatenate((pre_surgery,surgery_break,post_surgery),axis=1)
+	data = 1-np.concatenate((pre_surgery,surgery_break,post_surgery),axis=1)
 	##get the mean and std error
 	mean = np.nanmean(data,axis=0)
 	err = np.nanstd(data,axis=0)/np.sqrt(data.shape[0])
@@ -1159,6 +1295,9 @@ def plot_trial_durations(early_range=[0,5],late_range=[13,20],max_duration=30*10
 	ax3.text(5,0.3,"mean={0:.2f}".format(late_durations.mean()))
 	fig.suptitle("Distibution of trial durations",fontsize=14)
 	plt.tight_layout()
+	tval,pval = stats.ttest_ind(early_durations,late_durations)
+	print("P = {}".format(pval))
+	print("T = {}".format(tval))
 
 
 """
@@ -1665,7 +1804,7 @@ Inputs:
 	Z: transformed spike matrix (output from dpca.session_dpca)
 	time: time axis (output from dpca.session_dpca)
 """
-def plot_dpca_results(Z,var_explained,conditions,bin_size,pad=None,n_components=3):	
+def plot_dpca_results(Z,var_explained,sig_masks,conditions,bin_size,pad=None,n_components=3):	
 	##set up the figure
 	fig = plt.figure()
 	##add time and interaction as a conditions
@@ -1695,13 +1834,13 @@ def plot_dpca_results(Z,var_explained,conditions,bin_size,pad=None,n_components=
 				label=dpca.condition_pairs[conditions[1]][1]+",\n"+dpca.condition_pairs[conditions[2]][1],
 			linestyle='dashed')
 			##now get the significance masks (unless there isn't one, like for time)
-			# try:
-			# 	mask = sig_masks[c_idx[c]][p]
-			# 	sigx = np.where(mask==True)[0]
-			# 	sigy = np.ones(sigx.size)*ax.get_ylim()[0]
-			# 	ax.plot(sigx,sigy,color='k',linewidth=2)
-			# except KeyError:
-			# 	pass
+			try:
+				mask = sig_masks[c_idx[c]][p]
+				sigx = np.where(mask==True)[0]
+				sigy = np.ones(sigx.size)*ax.get_ylim()[0]
+				ax.plot(sigx,sigy,color='k',linewidth=2)
+			except KeyError:
+				pass
 			##now plot the lines corresponding to the events, if requested
 			if pad is not None:
 				plt.vlines(np.array([pad[0],time.max()-pad[1]]),ax.get_ylim()[0],ax.get_ylim()[1],
@@ -1903,6 +2042,20 @@ def plot_tensors(factors,trial_data,n_factors=4,plots=['bar','line','scatter'],y
 				axes[r,i].set_yticklabels([str(ymin), str(ymax)])
 
 	plt.tight_layout()
+
+def plot_all_tensors(smooth_method='both',smooth_width=[80,40],pad=[1200,1200],
+	z_score=True,trial_duration=None,max_duration=3000,min_rate=0.1,n_components=4,epoch='outcome'):
+	for f_behavior,f_ephys in zip(file_lists.e_behavior,file_lists.ephys_files):
+		print(f_behavior[-11:-5])
+		try:
+			model,info,trial_data = ta.run_tensor(f_behavior,f_ephys,smooth_method=smooth_method,
+			smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=trial_duration,
+			max_duration=max_duration,min_rate=min_rate,n_components=n_components,epoch=epoch)
+			plot_tensors(model,trial_data,n_factors=3)
+			plt.show()
+		except:
+			pass
+
 
 """
 A helper function to calculate the mean and 95% CI of some data

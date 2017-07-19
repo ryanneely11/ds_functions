@@ -243,9 +243,9 @@ def run_dpca(X_trials,n_components,conditions):
 	##Next, get the variance explained:
 	var_explained = dpca.explained_variance_ratio_
 	##finally, get the significance masks (places where the demixed components are significant)
-	# sig_masks = dpca.significance_analysis(np.nanmean(X_trials,axis=0),X_trials,axis='t',
-	# 	n_shuffles=100,n_splits=3,n_consecutive=2)
-	return Z,var_explained #,sig_masks
+	sig_masks = dpca.significance_analysis(np.nanmean(X_trials,axis=0),X_trials,axis='t',
+		n_shuffles=100,n_splits=3,n_consecutive=2)
+	return Z,var_explained,sig_masks
 
 """
 A function to fit dpca using one dataset, and then use that

@@ -554,6 +554,7 @@ def get_persistence():
 	master_list = equalize_arrs(master_list)
 	return master_list	
 
+
 """
 A function that calculates how many trials it takes for an animal to 
 reach a criterion level of peformance after block switches. Function returns the
@@ -781,10 +782,9 @@ def get_dpca_datasets_all(conditions,smooth_method='both',smooth_width=[80,40],p
 	pool.join()
 	results = async_result.get()
 	for i in range(len(results)):
-		if results[i][0].size > 1:
-			X_all.append(results[i][0])
-			session_names.append(results[i][1])
-	return X_all, session_names
+		if results[i].size > 1:
+			X_all.append(results[i])
+	return X_all
 
 """
 A function to return dpca-transformed datasets from all sessions

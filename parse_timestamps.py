@@ -372,18 +372,21 @@ def get_context_levers(upper_rewarded,lower_rewarded,upper_lever,lower_lever,
 	##start by getting the block boundaries
 	block_times = get_block_times(lower_rewarded,upper_rewarded,session_length)
 	##now just get the periods for the context that we care about
-	block_windows = block_times[context]
-	##now get the timestamps of all presses in each block
-	presses = []
-	for block in block_windows:
-		##upper and lower lever timestamp arrays contain all the presses
-		idx_upper = np.nonzero(np.logical_and(upper_lever>=block[0],
-			upper_lever<=block[1]))[0]
-		idx_lower = np.nonzero(np.logical_and(lower_lever>=block[0],
-			lower_lever<=block[1]))[0]
-		presses.append(upper_lever[idx_upper])
-		presses.append(lower_lever[idx_lower])
-	presses = np.concatenate(presses)
+	try:
+		block_windows = block_times[context]
+		##now get the timestamps of all presses in each block
+		presses = []
+		for block in block_windows:
+			##upper and lower lever timestamp arrays contain all the presses
+			idx_upper = np.nonzero(np.logical_and(upper_lever>=block[0],
+				upper_lever<=block[1]))[0]
+			idx_lower = np.nonzero(np.logical_and(lower_lever>=block[0],
+				lower_lever<=block[1]))[0]
+			presses.append(upper_lever[idx_upper])
+			presses.append(lower_lever[idx_lower])
+		presses = np.concatenate(presses)
+	except KeyError:
+		presses = np.array([])
 	return presses
 
 """
