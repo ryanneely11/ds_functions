@@ -6,9 +6,8 @@ import tensortools as tt
 import numpy as np
 import parse_trials as ptr
 import itertools as itr
-import full_analyses as fa
 import pandas as pd
-import file_lists_unsorted as flu
+# import file_lists_unsorted as flu
 import session_analysis as sa
 
 """

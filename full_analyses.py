@@ -18,7 +18,7 @@ import multiprocessing as mp
 import log_regression3 as lr3
 import log_regression2 as lr2
 import model_fitting as mf
-import file_lists_unsorted as flu
+# import file_lists_unsorted as flu
 
 
 """
@@ -682,6 +682,70 @@ def get_dpca_dataset(conditions,smooth_method='both',smooth_width=[80,40],pad=[4
 		X_c.append(X_all[s][0:min_trials,:,:,:,:])
 	return np.concatenate(X_c,axis=1)
 	return X_c
+
+"""
+A function to get a dataset that includes data from all animals and sessions,
+specifically formatted to use in the MATLAB implementation of dPCA.
+Inputs:
+	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	pad: a window for pre- and post-trial padding, in ms. In other words, an x-ms period of time 
+		before lever press to consider the start of the trial, and an x-ms period of time after
+		reward to consider the end of the trial
+	z_score: if True, z-scores the array
+Returns:
+	X_c: data from individual trials;
+		 shape n-trials x n-neurons x condition-1 x condition-2, ... x n-timebins
+"""
+def get_dpca_dataset_mlab(conditions,smooth_method='both',smooth_width=[80,40],pad=[800,800],
+	z_score=True,max_duration=5000,min_rate=0.1):
+	##a container to store all of the X_trials data
+	X_all = []
+	trialNum = []
+	##the first step is to determine the median trial length for all sessions
+	med_duration = np.median(get_trial_durations(max_duration=max_duration,session_range=None)).astype(int)
+	arglist = [[f_behavior,f_ephys,conditions,smooth_method,smooth_width,pad,z_score,med_duration,
+				max_duration,min_rate] for f_behavior,f_ephys in zip(file_lists.e_behavior,
+					file_lists.ephys_files)]
+	##assign data collection to multiple processes
+	pool = mp.Pool(processes=8)
+	async_result = pool.map_async(dpca.get_dataset_mp_mlab,arglist)
+	pool.close()
+	pool.join()
+	results = async_result.get()
+	for i in range(len(results)):
+		if np.size(results[i][0]) > 1:
+			X_all.append(results[i][0])
+			trialNum.append(results[i][1])
+	##we can just concatenate the trialNums along the zeroth axis
+	trialNum = np.concatenate(trialNum,axis=0).astype(int)
+	##now we need to determine the max number of trials across all datasets
+	max_trials = trialNum.max()
+	##now get other params needed to allocate the complete dataset
+	n_stim = trialNum.shape[1]
+	n_choices = trialNum.shape[2]
+	n_bins = X_all[0].shape[4]
+	n_neurons = 0
+	for session in range(len(X_all)):
+		n_neurons += X_all[session].shape[1]
+	##finally we can allocate the dataset shape
+	X_full = np.zeros((max_trials,n_neurons,n_stim,n_choices,n_bins))
+	X_full[:] = np.nan
+	##now add all the data to the dataset
+	neuron_cursor = 0 ##to track the number of neurons added to the dset
+	for i in range(len(X_all)):
+		dset = X_all[i] ##the dset to work with
+		n_trials = dset.shape[0]
+		n_units = dset.shape[1]
+		X_full[0:n_trials,neuron_cursor:neuron_cursor+n_units,:,:,:] = dset
+		neuron_cursor+=n_units
+	##at this point X_full is in shape trials x units x stimuli x actions x time.
+	##we want to reshape for matlab implementation:
+	X_full = np.transpose(X_full,axes=[1,2,3,4,0])
+	##the shape is now units x stim x actions x time x trials
+	return X_full,trialNum
+
 
 """
 A function to get a dpca dataset, but only include trials that fit a certain belief

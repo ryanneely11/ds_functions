@@ -244,7 +244,7 @@ def run_dpca(X_trials,n_components,conditions):
 	var_explained = dpca.explained_variance_ratio_
 	##finally, get the significance masks (places where the demixed components are significant)
 	sig_masks = dpca.significance_analysis(np.nanmean(X_trials,axis=0),X_trials,axis='t',
-		n_shuffles=100,n_splits=3,n_consecutive=2)
+		n_shuffles=25,n_splits=3,n_consecutive=1)
 	return Z,var_explained,sig_masks
 
 """
@@ -585,3 +585,97 @@ def get_switch_index(trial_data,n_after):
 				switch_trials.append(new_block_starts[t]+n)
 	return switch_trials
 
+
+"""
+##############################################
+###############################################
+##############################################
+          Functions to produce datasets for MATLAB
+"""
+
+def get_dataset_mlab(f_behavior,f_ephys,conditions,smooth_method='both',smooth_width=[80,40],pad=[400,400],
+	z_score=True,trial_duration=None,max_duration=5000,min_rate=0.1):
+	global condition_pairs
+	##get the spike dataset, and the trial info
+	X,trial_data = ptr.get_trial_spikes(f_behavior=f_behavior,f_ephys=f_ephys,smooth_method=smooth_method,
+		smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=trial_duration,
+		max_duration=max_duration,min_rate=min_rate)
+	##get some metadata about this session
+	n_units = X.shape[1]
+	n_bins = X.shape[2]
+	#sort out the different trial types
+	trial_index,n_trials = split_trials(trial_data,conditions)
+	trial_types = list(trial_index)
+	##allocate space for the dataset
+	if n_trials > 0:
+		X_c = np.empty((n_trials,n_units,len(condition_pairs[conditions[0]]),
+			len(condition_pairs[conditions[1]]),n_bins))
+		X_c[:] = np.nan
+		##generate an array that provides info about how many trial numbers we have for each trial type
+		trialNum = np.empty((n_units,len(condition_pairs[conditions[0]]),
+				len(condition_pairs[conditions[1]])))
+		trialNum[:] = np.nan
+		for t in trial_index.keys():
+			##based on the key, figure out where these trials should be placed in the dataset
+			##I **think** that we should always expect the context[0] trial type to be the first part of the string
+			c1_type = t[:t.index('+')]
+			c2_type = t[t.index('+')+1:]
+			c1_idx = condition_pairs[conditions[0]].index(c1_type)
+			c2_idx = condition_pairs[conditions[1]].index(c2_type)
+			##now add the data to the dataset using these indices
+			for i,j in enumerate(trial_index[t]):
+				X_c[i,:,c1_idx,c2_idx,:] = X[j,:,:]
+			##record how many trials of this type we have
+			trialNum[:,c1_idx,c2_idx] = len(trial_index[t])
+	else:
+		X_c = None
+		trialNum = None
+	return X_c,trialNum
+
+
+"""
+A multiprocessing implementation of get_dataset()
+"""
+def get_dataset_mp_mlab(args):
+	##parse args
+	f_behavior = args[0]
+	f_ephys = args[1]
+	conditions = args[2]
+	smooth_method = args[3]
+	smooth_width = args[4]
+	pad = args[5]
+	z_score = args[6]
+	trial_duration = args[7]
+	max_duration = args[8]
+	min_rate = args[9]
+	current_file = f_behavior[-11:-5]
+	print("Adding data from file "+current_file)
+	X_c,trialNum = get_dataset_mlab(f_behavior,f_ephys,conditions,smooth_method=smooth_method,smooth_width=smooth_width,
+		pad=pad,z_score=z_score,trial_duration=trial_duration,max_duration=max_duration,min_rate=min_rate)
+	return X_c,trialNum
+
+
+def split_trials(trial_data,conditions):
+	##begin by getting the data for both of the conditions
+	cond_1 = trial_data[conditions[0]]
+	cond_2 = trial_data[conditions[1]]
+	##figure out how many different trial types we have
+	n_types = np.unique(cond_1).size * np.unique(cond_2).size
+	##make a dictionary to store the indices of each trial type
+	trial_index = {}
+	for c1 in np.unique(cond_1):
+		for c2 in np.unique(cond_2):
+			trial_index[c1+"+"+c2] = []
+	for i in range(len(trial_data.index)):
+		trial_type = trial_data[conditions[0]][i]+"+"+trial_data[conditions[1]][i]
+		##now just add the index to the dictionary
+		trial_index[trial_type].append(i)
+	##now, what is the maximum number of trials across all trial types?
+	max_trials = max([len(x) for x in trial_index.values()])
+	min_trials = min([len(x) for x in trial_index.values()])
+	##this is a check to be sure we have at least 1 trial per condition
+	if min_trials > 4:
+		n_trials = max_trials
+	else:
+		n_trials = 0
+	return trial_index,n_trials

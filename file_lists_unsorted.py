@@ -8,7 +8,7 @@ from sys import platform as _platform
 import h5py
 
 if _platform == 'win32':
-	root = r'D:/'
+	root = r'K:/'
 elif _platform == 'darwin':
 	root = "/Volumes/Untitled"
 
