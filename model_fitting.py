@@ -159,6 +159,17 @@ def fit_models_from_trial_data(trial_data):
 	}
 	return results
 
+"""
+A function to compute the uncertainty, which is 1/(p(state1)-p(state2))
+"""
+def uncertainty_from_trial_data(trial_data):
+	results = fit_models_from_trial_data(trial_data)
+	certainty = abs(results['state_vals'][0]-results['state_vals'][1])
+	uncertainty = np.log(1/certainty)
+	##the first value is infinite, so replace/approximte it with the second
+	uncertainty[0] = uncertainty[1]
+	return uncertainty
+
 
 """
 A function to get the action or outcome

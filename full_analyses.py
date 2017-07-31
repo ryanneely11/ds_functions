@@ -18,6 +18,7 @@ import multiprocessing as mp
 import log_regression3 as lr3
 import log_regression2 as lr2
 import model_fitting as mf
+import linear_
 # import file_lists_unsorted as flu
 
 
