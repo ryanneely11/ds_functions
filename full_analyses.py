@@ -18,7 +18,7 @@ import multiprocessing as mp
 import log_regression3 as lr3
 import log_regression2 as lr2
 import model_fitting as mf
-import linear_
+import linear_regression2 as lin2
 # import file_lists_unsorted as flu
 
 
@@ -124,8 +124,8 @@ def linear_regression(smooth_method='both',smooth_width=[100,50],pad=[800,800],
 	proportions_f = []
 	proportions_p = []
 	for animal in file_lists.animals:
-		behavior_files= file_lists.split_behavior_by_animal(match_ephys=True)[animal][-4:]
-		ephys_files = file_lists.split_ephys_by_animal()[animal][-4:]
+		behavior_files= file_lists.split_behavior_by_animal(match_ephys=True)[animal]
+		ephys_files = file_lists.split_ephys_by_animal()[animal]
 		f_perc = []
 		p_perc = []
 		for f_behavior,f_ephys in zip(behavior_files,ephys_files):
@@ -137,8 +137,27 @@ def linear_regression(smooth_method='both',smooth_width=[100,50],pad=[800,800],
 			p_perc.append(p_p)
 		proportions_f.append(np.asarray(f_perc))
 		proportions_p.append(np.asarray(p_perc))
-	return np.asarray(proportions_f),np.asarray(proportions_p)
-
+	##now equalize the array shape
+	proportions_f = np.asarray(proportions_f)
+	proportions_p = np.asarray(proportions_p)
+	n_sessions = []
+	for i in range(proportions_f.shape[0]):
+		n_sessions.append(proportions_f[i].shape[0])
+	max_sessions = max(n_sessions)
+	data_f = np.zeros((proportions_f.shape[0],max_sessions,proportions_f[0].shape[1],
+		proportions_f[0].shape[2]))
+	data_f[:,:,:,:] = np.NaN
+	data_p = np.zeros((proportions_p.shape[0],max_sessions,proportions_p[0].shape[1],
+		proportions_p[0].shape[2]))
+	data_p[:,:,:,:] = np.nan
+	for i in range(proportions_f.shape[0]):
+		animal_data = proportions_f[i]
+		animal_data_p = proportions_p[i]
+		for j in range(animal_data.shape[0]):
+			data_f[i,j,:,:] = animal_data[j,:,:]
+			data_p[i,j,:,:] = animal_data_p[j,:,:]
+	# return animal_data,animal_data_p
+	return proportions_f,proportions_p
 
 """
 A function to compute decision variables

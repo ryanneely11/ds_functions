@@ -29,6 +29,30 @@ import matplotlib.cm as cm
 from sklearn.manifold import TSNE
 from scipy.stats import pearsonr
 import tensor_analysis as ta
+import linear_regression2 as lin2
+
+def plot_linear_regression(results,window=[1000,1000]):
+	##the ordered list of regressors
+	regressor_list = lin2.to_regress
+	##the time axis
+	time = np.linspace(float(window[0])/-1000,float(window[1]/1000),results.shape[-1])
+	##for this analysis we will look at the mean/sem over animals:
+	animal_mean = np.nanmean(results,axis=1) ##shape is now animals x regressors x bins
+	##let's start with the bar graphs. 
+	##for this analysis, we will just look at the max encoding strength
+	##over the full trial window for each variable
+	animal_max = np.nanmax(animal_mean,axis=2)
+	x = np.arange(means.size)
+	means = animal_max.mean(axis=0)
+	sems = stats.sem(animal_max,axis=0)
+	fig1 = plt.figure()
+	ax1 = fig1.add_subplot(111)
+	bars = ax1.bar(x,means,align='center',width=0.5,yerr=sems,ecolor='k')
+	ax1.set_xticks(x)
+	ax1.set_xticklabels(regressor_list,rotation=45,weight='bold',fontsize=10)
+	ax1.set_ylabel('Percent of significant units',fontsize=14,weight='bold')
+	ax1.set_title("Proportion of units encoding task params",fontsize=14,weight='bold')
+
 
 """
 Plots tensors vs belief

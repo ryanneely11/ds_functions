@@ -11,6 +11,10 @@ from sklearn.model_selection import train_test_split
 import multiprocessing as mp
 from sklearn.metrics import mean_squared_error
 
+to_regress = ['action','outcome','state','uncertainty',
+'action/outcome', 'action/state','action/uncertainty','outcome/state',
+'outcome/uncertainty','state/uncertainty']
+
 """
 A function to pull regression data, including regressors and regressands
 out of behavioral and session data. Regressors include:
@@ -37,6 +41,7 @@ Returns:
 """
 def get_datasets(f_behavior,f_ephys,smooth_method='both',smooth_width=[80,40],
 	 pad=[1200,800],z_score=True,trial_duration=None,min_rate=0.1,max_duration=5000):
+	global to_regress
 	##start by getting the spike data and trial data
 	spike_data,trial_data = ptr.get_trial_spikes(f_behavior,f_ephys,
 		smooth_width=smooth_width,smooth_method=smooth_method,pad=pad,z_score=z_score,
@@ -46,9 +51,6 @@ def get_datasets(f_behavior,f_ephys,smooth_method='both',smooth_width=[80,40],
 	uncertainty = mf.uncertainty_from_trial_data(trial_data)
 	##now, compute the regressors from the HMM and trial data
 	##let's keep these as a pandas dataset just for clarity
-	to_regress = ['action','outcome','state','uncertainty',
-	'action/outcome', 'action/state','action/uncertainty','outcome/state',
-	'outcome/uncertainty','state/uncertainty']
 	regressors = pd.DataFrame(columns=to_regress,index=np.arange(n_trials))
 	##now fill out the regressors
 	regressors['action'] = np.asarray(trial_data['action']=='upper_lever').astype(int)+1

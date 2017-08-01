@@ -18,6 +18,7 @@ import pandas as pd
 import model_fitting as mf
 from sklearn import linear_model
 import linear_regression as linr
+import linear_regression2 as lin2
 from scipy.stats import pearsonr
 import tensor_analysis as ta
 save_root = os.path.join(file_lists.save_loc,"LogisticRegression/80gauss_40ms_bins")
@@ -90,16 +91,15 @@ def linear_regression(f_behavior,f_ephys,smooth_method='both',smooth_width=[100,
 	pad=[800,800],z_score=True,trial_duration=None,min_rate=0.1,max_duration=5000,
 	n_iter=1000,perc=False):
 	##first get the spike data and the trial data
-	Y,trial_data = ptr.get_trial_spikes(f_behavior,f_ephys,smooth_method=smooth_method,
+	spike_data,regressors = lin2.get_datasets(f_behavior,f_ephys,smooth_method=smooth_method,
 		smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=trial_duration,
 		min_rate=min_rate,max_duration=max_duration)
-	##now compute the regressor data using the trial data
-	X = np.asarray(linr.get_regressors(trial_data))
+	regressors = np.asarray(regressors)
 	##Run the regression on these data
-	f_counts,p_counts = linr.regress_spike_matrix(X,Y,add_constant=True,n_iter=n_iter)
+	f_counts,p_counts = lin2.regress_spike_matrix(regressors,spike_data,add_constant=True,n_iter=n_iter)
 	if perc:
-		f_counts = f_counts/float(Y.shape[1])
-		p_counts = p_counts/float(Y.shape[1])
+		f_counts = f_counts/float(spike_data.shape[1])
+		p_counts = p_counts/float(spike_data.shape[1])
 	return f_counts,p_counts
 
 
