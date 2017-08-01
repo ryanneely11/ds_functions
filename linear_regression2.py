@@ -12,8 +12,8 @@ import multiprocessing as mp
 from sklearn.metrics import mean_squared_error
 
 to_regress = ['action','outcome','state','uncertainty',
-'action/outcome', 'action/state','action/uncertainty','outcome/state',
-'outcome/uncertainty','state/uncertainty']
+'action x\noutcome', 'action x\nstate','action x\n uncertainty','outcome x\nstate',
+'outcome x\nuncertainty','state x\nuncertainty']
 
 """
 A function to pull regression data, including regressors and regressands

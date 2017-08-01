@@ -42,16 +42,99 @@ def plot_linear_regression(results,window=[1000,1000]):
 	##for this analysis, we will just look at the max encoding strength
 	##over the full trial window for each variable
 	animal_max = np.nanmax(animal_mean,axis=2)
-	x = np.arange(means.size)
 	means = animal_max.mean(axis=0)
+	x = np.arange(means.size)
 	sems = stats.sem(animal_max,axis=0)
 	fig1 = plt.figure()
-	ax1 = fig1.add_subplot(111)
-	bars = ax1.bar(x,means,align='center',width=0.5,yerr=sems,ecolor='k')
+	ax1 = fig1.add_subplot(221)
+	bars = ax1.bar(x,means,align='center',width=0.85,yerr=sems,ecolor='k',color='green')
 	ax1.set_xticks(x)
-	ax1.set_xticklabels(regressor_list,rotation=45,weight='bold',fontsize=10)
-	ax1.set_ylabel('Percent of significant units',fontsize=14,weight='bold')
-	ax1.set_title("Proportion of units encoding task params",fontsize=14,weight='bold')
+	ax1.set_xticklabels([])
+	ax1.set_ylabel('Percent of significant units',fontsize=14)
+	ax1.set_title("All",fontsize=14)
+	##now we can repeat this for early/late
+	######################################
+	results_early = results[:,0:4,:,:]
+	##for this analysis we will look at the mean/sem over animals:
+	animal_mean = np.nanmean(results_early,axis=1) ##shape is now animals x regressors x bins
+	##let's start with the bar graphs. 
+	##for this analysis, we will just look at the max encoding strength
+	##over the full trial window for each variable
+	animal_max_early = np.nanmax(animal_mean,axis=2)
+	means = animal_max_early.mean(axis=0)
+	x = np.arange(means.size)
+	sems = stats.sem(animal_max_early,axis=0)
+	ax2 = fig1.add_subplot(222)
+	bars = ax2.bar(x,means,align='center',width=0.85,yerr=sems,ecolor='k',color='cyan')
+	ax2.set_xticks(x)
+	ax2.set_xticklabels([])
+	ax2.set_ylabel('Percent of significant units',fontsize=14)
+	ax2.set_title("Early",fontsize=14)
+	######################################
+	results_late = results[:,-5:-1,:,:]
+	##for this analysis we will look at the mean/sem over animals:
+	animal_mean = np.nanmean(results_late,axis=1) ##shape is now animals x regressors x bins
+	##let's start with the bar graphs. 
+	##for this analysis, we will just look at the max encoding strength
+	##over the full trial window for each variable
+	animal_max_late = np.nanmax(animal_mean,axis=2)
+	means = animal_max_late.mean(axis=0)
+	x = np.arange(means.size)
+	sems = stats.sem(animal_max_late,axis=0)
+	ax3 = fig1.add_subplot(223)
+	bars = ax3.bar(x,means,align='center',width=0.85,yerr=sems,ecolor='k',color='blue')
+	ax3.set_xticks(x)
+	ax3.set_xticklabels(regressor_list,rotation=45,weight='bold',fontsize=10)
+	ax3.set_ylabel('Percent of significant units',fontsize=14)
+	ax3.set_title("Late",fontsize=14)
+	##now we can look at the change early/late, and see if any change is significant
+	#####################################
+	##first compute the p-values
+	t_vals,p_vals = stats.ttest_rel(animal_max_early,animal_max_late)
+	##now the differences
+	diffs = animal_max_late-animal_max_early
+	means = diffs.mean(axis=0)
+	sems = stats.sem(diffs,axis=0)
+	ax4 = fig1.add_subplot(224)
+	bars = ax4.bar(x,means,align='center',width=0.85,yerr=sems,ecolor='k',color='blue')
+	ax4.set_xticks(x)
+	ax4.set_xticklabels(regressor_list,rotation=45,fontsize=10,weight='bold')
+	ax4.set_ylabel('Percent of significant units',fontsize=14)
+	ax4.set_title("Diff early-late",fontsize=14)
+	fig1.suptitle("Fraction of units encoding task params",fontsize=14)
+	for i,pval in enumerate(p_vals):
+		if pval <= 0.05:
+			ax4.text(i,0.08,"*",fontsize=14)
+	#########################################
+	##now we can plot the encoding over time
+	##we will just look at the mean over all sessions
+	colors = ['red','blue','green','orange','purple','cyan','lightgreen','black','maroon','teal']
+	animal_mean = np.nanmean(results,axis=1)
+	means = animal_mean.mean(axis=0)
+	sems = stats.sem(animal_mean,axis=0)
+	fig2, axes = plt.subplots(nrows=2,ncols=5,sharex=True,sharey=True)
+	for i,label in enumerate(regressor_list):
+		ax = np.ravel(axes)[i]
+		ax.plot(time,means[i,:],linewidth=2,label=label,color=colors[i])
+		ax.fill_between(time,means[i,:]-sems[i,:],means[i,:]+sems[i,:],color=colors[i],alpha=0.5)
+		ax.set_ylim(0.04,0.16)
+		if i > 4:
+			ax.set_xlabel("Time in trial",fontsize=14)
+			for ticklabel in ax.get_xticklabels():
+				ticklabel.set_fontsize(14)
+		# else:
+		# 	# ax.set_xticklabels([])
+		if i == 0 or i == 5:
+			ax.set_ylabel("Fraction of units",fontsize=14)
+			for ticklabel in ax.get_yticklabels():
+				ticklabel.set_fontsize(14)
+		# else:
+		# 	ax.set_yticklabels([])
+		ax.legend()
+
+
+
+
 
 
 """
