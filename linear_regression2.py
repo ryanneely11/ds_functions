@@ -58,12 +58,12 @@ def get_datasets(f_behavior,f_ephys,smooth_method='both',smooth_width=[80,40],
 	regressors['state'] = np.asarray(trial_data['context']=='upper_rewarded').astype(int)+1
 	regressors['uncertainty'] = uncertainty
 	##now do the interactions
-	regressors['action/outcome'] = regressors['action']*regressors['outcome']
-	regressors['action/state'] = regressors['action']*regressors['state']
-	regressors['action/uncertainty'] =regressors['action']*regressors['uncertainty']
-	regressors['outcome/state'] = regressors['outcome']*regressors['state']
-	regressors['outcome/uncertainty']  = regressors['outcome']*regressors['uncertainty']
-	regressors['state/uncertainty'] = regressors['state']*regressors['uncertainty']
+	regressors['action x\noutcome'] = regressors['action']*regressors['outcome']
+	regressors['action x\nstate'] = regressors['action']*regressors['state']
+	regressors['action x\n uncertainty'] =regressors['action']*regressors['uncertainty']
+	regressors['outcome x\nstate'] = regressors['outcome']*regressors['state']
+	regressors['outcome x\nuncertainty']  = regressors['outcome']*regressors['uncertainty']
+	regressors['state x\nuncertainty'] = regressors['state']*regressors['uncertainty']
 	##Now just return the data arrays
 	return spike_data,regressors
 
@@ -198,3 +198,83 @@ def regress_spike_matrix(X,Y,add_constant=True,n_iter=1000):
 	p_counts = (p_pvals <= p_thresh).sum(axis=0)
 	return f_counts,p_counts
 
+"""
+a function to do regression on a spike matrix consisting of
+binned spike data from many neurons across time. unlike the above function,
+this one looks at each neuron and asks if single neurons represent
+one or more variables
+Inputs:
+	X: regressor array, size n-observations x k-features
+	Y: regressand array, size n-observations x p neurons x t bins/timesteps
+	add_constant: if True, adds a constant
+	n_iter: number of iterations to run the permutation test. if 0, no 
+		permutation test is performed.
+	n_consecutive: requires that encoding be significant for n consecutive time bins
+Returns:
+	n_encoded: number of parameters with some significant encoded by each neuron
+		at some point during the trial
+
+	###TODO: generate a permutation test-compatible version of this#####
+"""
+def regress_spike_matrix2(X,Y,add_constant=True,n_iter=0,n_consecutive=4):
+	n_neurons = Y.shape[1]
+	if add_constant:
+		n_coeffs = X.shape[1]
+	else:
+		n_coeffs = X.shape[1]-1
+	n_bins = Y.shape[2] ##number of time bins
+	##setup output data
+	f_pvals = np.zeros((n_neurons,n_coeffs,n_bins))
+	p_pvals = np.zeros((n_neurons,n_coeffs,n_bins))
+	##basically just perform regress_timecourse for each neuron
+	##use multiprocessing to speed up the permutation testing.
+	arglist = [[X,Y[:,n,:],add_constant,n_iter] for n in range(n_neurons)]
+	pool = mp.Pool(processes=n_neurons)
+	async_result = pool.map_async(regress_timecourse,arglist)
+	pool.close()
+	pool.join()
+	results = async_result.get()
+	for n in range(len(results)):
+		f_pvals[n,:,:] = results[n][0]
+		p_pvals[n,:,:] = results[n][1]
+	##now we want to count up the significant neurons
+	p_thresh = 0.05
+	##this array will store, for each neuron, the number of 
+	##variables that it encodes significantly at any point
+	##during the trial
+	n_neurons = f_pvals.shape[0]
+	n_regressors = f_pvals.shape[1]
+	n_encoded = np.zeros((n_neurons))
+	for n in range(n_neurons):
+		unit_data = f_pvals[n,:,:]
+		##does this neuron encode any of the parameters at any point?
+		encoded = np.zeros(n_regressors)
+		for i in range(n_regressors):
+			encoded[i] = bool(contiguous_regions(unit_data[i,:]<=0.05,n_consecutive))
+		##count up how many params are encoded and add to the data
+		n_encoded[n] = encoded.sum()
+	return n_encoded
+##helper
+def contiguous_regions(condition,n_consecutive):
+	"""Finds contiguous True regions of the boolean array "condition". Returns
+	a 2D array where the first column is the start index of the region and the
+	second column is the end index."""
+	# Find the indicies of changes in "condition"
+	d = np.diff(condition)
+	idx, = d.nonzero() 
+	# We need to start things after the change in "condition". Therefore, 
+	# we'll shift the index by 1 to the right.
+	idx += 1
+	if condition[0]:
+		# If the start of condition is True prepend a 0
+		idx = np.r_[0, idx]
+	if condition[-1]:
+		# If the end of condition is True, append the length of the array
+		idx = np.r_[idx, condition.size] # Edit
+	# Reshape the result into two columns
+	idx.shape = (-1,2)
+	##find the length of contiguous sections
+	n_contiguous = np.diff(idx,axis=-1)
+	##count how many meet or exceed the min consecutive criteria
+	n_meeting = (n_contiguous>=n_consecutive).sum()
+	return n_meeting

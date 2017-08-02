@@ -160,6 +160,40 @@ def linear_regression(smooth_method='both',smooth_width=[100,50],pad=[800,800],
 	return proportions_f,proportions_p
 
 """
+Run linear regression on all trials for all animals, and return the number of parameters
+encoded by each neuron.
+Inputs:
+	smooth_method: type of smoothing to use; choose 'bins', 'gauss', 'both', or 'none'
+	smooth_width: size of the bins or gaussian kernel in ms. If 'both', input should be a list
+		with index 0 being the gaussian width and index 1 being the bin width
+	pad: a window for pre- and post-trial padding, in ms. In other words, an x-ms period of time 
+		before lever press to consider the start of the trial, and an x-ms period of time after
+		reward to consider the end of the trial. For best results, should be a multiple of the bin size
+	z_score: if True, z-scores the array
+	min_rate: the min spike rate, in Hz, to accept. Units below this value will be removed.
+	max_duration: maximum allowable trial duration (ms)
+	n_iter: number of iterations to use for permutation testing
+	n_consecutive: require this many consecutive time bins of significant encoding
+		to consider a neuron's encoding of a parameter significant
+"""
+def linear_regression2(smooth_method='both',smooth_width=[100,50],pad=[800,800],
+	z_score=True,min_rate=0.1,max_duration=5000,n_iter=0,n_consecutive=4):
+	all_encoding = []
+	for animal in file_lists.animals:
+		behavior_files= file_lists.split_behavior_by_animal(match_ephys=True)[animal]
+		ephys_files = file_lists.split_ephys_by_animal()[animal]
+		animal_encoding = []
+		for f_behavior,f_ephys in zip(behavior_files,ephys_files):
+			print("Processing {}".format(f_behavior[-11:-5]))
+			n_encoded = sa.linear_regression2(f_behavior,f_ephys,smooth_method=smooth_method,
+				smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=None,
+				min_rate=min_rate,max_duration=max_duration,n_iter=n_iter,n_consecutive=n_consecutive)
+			animal_encoding.append(n_encoded)
+		all_encoding.append(animal_encoding)
+	# return animal_data,animal_data_p
+	return all_encoding
+
+"""
 A function to compute decision variables
 Inputs:
 	-window [pre_event, post_event] window, in ms
@@ -302,7 +336,7 @@ def decision_vars2(pad=[1200,120],smooth_method='both',smooth_width=[100,40],
 """
 A function to compare belief vars and last outcome
 """
-def belief_vs_outcomes(max_duration=5000):
+def uncertainty_vs_outcomes(max_duration=5000):
 	Rew = []
 	Unrew = []
 	for animal in file_lists.animals:
@@ -310,7 +344,7 @@ def belief_vs_outcomes(max_duration=5000):
 		unrew = []
 		behavior_files = file_lists.split_behavior_by_animal(match_ephys=False)[animal][6:] ##first 6 days have only one lever
 		for f_behavior in behavior_files:
-			last_rew_belief,last_unrew_belief = sa.belief_vs_last_rewarded(f_behavior,max_duration)
+			last_rew_belief,last_unrew_belief = sa.uncertainty_vs_last_rewarded(f_behavior,max_duration)
 			rew.append(last_rew_belief)
 			unrew.append(last_unrew_belief)
 		Rew.append(np.asarray(rew))

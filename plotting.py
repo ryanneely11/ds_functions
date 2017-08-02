@@ -31,11 +31,35 @@ from scipy.stats import pearsonr
 import tensor_analysis as ta
 import linear_regression2 as lin2
 
-def plot_linear_regression(results,window=[1000,1000]):
+def plot_linear_regression2(results):
+	data = []
+	for i in range(len(results)):
+		for j in range(len(results[i])):
+			for k in range(len(results[i][j])):
+				data.append(results[i][j][k])
+	data = np.asarray(data)
+	fig, ax = plt.subplots(1)
+	n,bins,patches=ax.hist(data,11,normed=0,facecolor='green',alpha=0.75,edgecolor='green',linewidth=3)
+	ax.set_title("Single-neuron encoding",fontsize=14,weight='bold')
+	ax.set_xlabel("Number of parameters",fontsize=14)
+	ax.set_ylabel("Counts",fontsize=14)
+	for tick in ax.xaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	for tick in ax.yaxis.get_major_ticks():
+		tick.label.set_fontsize(14)
+	ax.text(0,150,"mean={0:.2f}".format(data.mean()))
+
+
+def plot_linear_regression(results,window=[1000,1000],bin_width=50):
 	##the ordered list of regressors
 	regressor_list = lin2.to_regress
 	##the time axis
-	time = np.linspace(float(window[0])/-1000,float(window[1]/1000),results.shape[-1])
+	n_bins = results.shape[3]
+	total_seconds = float(n_bins*bin_width)/1000
+	start = -window[0]/1000.0
+	end = total_seconds-start
+	poke_time = total_seconds-(window[1]/1000.0)
+	time = np.linspace(start,end,results.shape[-1])
 	##for this analysis we will look at the mean/sem over animals:
 	animal_mean = np.nanmean(results,axis=1) ##shape is now animals x regressors x bins
 	##let's start with the bar graphs. 
@@ -45,12 +69,13 @@ def plot_linear_regression(results,window=[1000,1000]):
 	means = animal_max.mean(axis=0)
 	x = np.arange(means.size)
 	sems = stats.sem(animal_max,axis=0)
-	fig1 = plt.figure()
-	ax1 = fig1.add_subplot(221)
+	fig1, axes1 = plt.subplots(2,2,sharex=True,sharey=True)
+	axes1 = axes1.ravel()
+	ax1 = axes1[0]
 	bars = ax1.bar(x,means,align='center',width=0.85,yerr=sems,ecolor='k',color='green')
 	ax1.set_xticks(x)
 	ax1.set_xticklabels([])
-	ax1.set_ylabel('Percent of significant units',fontsize=14)
+	ax1.set_ylabel('Fraction significant',fontsize=14)
 	ax1.set_title("All",fontsize=14)
 	##now we can repeat this for early/late
 	######################################
@@ -64,11 +89,11 @@ def plot_linear_regression(results,window=[1000,1000]):
 	means = animal_max_early.mean(axis=0)
 	x = np.arange(means.size)
 	sems = stats.sem(animal_max_early,axis=0)
-	ax2 = fig1.add_subplot(222)
+	ax2 = axes1[1]
 	bars = ax2.bar(x,means,align='center',width=0.85,yerr=sems,ecolor='k',color='cyan')
 	ax2.set_xticks(x)
 	ax2.set_xticklabels([])
-	ax2.set_ylabel('Percent of significant units',fontsize=14)
+	# ax2.set_ylabel('Percent of significant units',fontsize=14)
 	ax2.set_title("Early",fontsize=14)
 	######################################
 	results_late = results[:,-5:-1,:,:]
@@ -81,11 +106,11 @@ def plot_linear_regression(results,window=[1000,1000]):
 	means = animal_max_late.mean(axis=0)
 	x = np.arange(means.size)
 	sems = stats.sem(animal_max_late,axis=0)
-	ax3 = fig1.add_subplot(223)
+	ax3 = axes1[2]
 	bars = ax3.bar(x,means,align='center',width=0.85,yerr=sems,ecolor='k',color='blue')
 	ax3.set_xticks(x)
-	ax3.set_xticklabels(regressor_list,rotation=45,weight='bold',fontsize=10)
-	ax3.set_ylabel('Percent of significant units',fontsize=14)
+	ax3.set_xticklabels(regressor_list,rotation=90,weight='bold',fontsize=10)
+	ax3.set_ylabel('Fraction significant',fontsize=14)
 	ax3.set_title("Late",fontsize=14)
 	##now we can look at the change early/late, and see if any change is significant
 	#####################################
@@ -95,11 +120,11 @@ def plot_linear_regression(results,window=[1000,1000]):
 	diffs = animal_max_late-animal_max_early
 	means = diffs.mean(axis=0)
 	sems = stats.sem(diffs,axis=0)
-	ax4 = fig1.add_subplot(224)
-	bars = ax4.bar(x,means,align='center',width=0.85,yerr=sems,ecolor='k',color='blue')
+	ax4 = axes1[3]
+	bars = ax4.bar(x,means,align='center',width=0.85,yerr=sems,ecolor='k',color='grey')
 	ax4.set_xticks(x)
-	ax4.set_xticklabels(regressor_list,rotation=45,fontsize=10,weight='bold')
-	ax4.set_ylabel('Percent of significant units',fontsize=14)
+	ax4.set_xticklabels(regressor_list,rotation=90,fontsize=10,weight='bold')
+	# ax4.set_ylabel('Percent of significant units',fontsize=14)
 	ax4.set_title("Diff early-late",fontsize=14)
 	fig1.suptitle("Fraction of units encoding task params",fontsize=14)
 	for i,pval in enumerate(p_vals):
@@ -114,7 +139,10 @@ def plot_linear_regression(results,window=[1000,1000]):
 	sems = stats.sem(animal_mean,axis=0)
 	fig2, axes = plt.subplots(nrows=2,ncols=5,sharex=True,sharey=True)
 	for i,label in enumerate(regressor_list):
+		##a dotted line to mark the lever press and poke times
 		ax = np.ravel(axes)[i]
+		ax.vlines(0,0.04,0.16,color='g',linestyle='dashed',linewidth=2)
+		ax.vlines(poke_time,0.04,0.16,color='k',linestyle='dashed',linewidth=2)
 		ax.plot(time,means[i,:],linewidth=2,label=label,color=colors[i])
 		ax.fill_between(time,means[i,:]-sems[i,:],means[i,:]+sems[i,:],color=colors[i],alpha=0.5)
 		ax.set_ylim(0.04,0.16)
@@ -296,8 +324,8 @@ def plot_tsne(f_behavior,f_ephys,smooth_method='both',smooth_width=[80,40],
 """
 A function to plot belief states VS the outcome of the last trial
 """
-def plot_belief_vs_outcomes(max_duration=5000):
-	rew,unrew = fa.belief_vs_outcomes(max_duration=max_duration)
+def plot_uncertainty_vs_outcomes(max_duration=5000):
+	rew,unrew = fa.uncertainty_vs_outcomes(max_duration=max_duration)
 	n_animals = rew.shape[0]
 	rew_by_animal = np.zeros(n_animals)
 	unrew_by_animal = np.zeros(n_animals)
@@ -326,15 +354,42 @@ def plot_belief_vs_outcomes(max_duration=5000):
 		ticklabel.set_fontsize(14)
 	# ax2.set_ylabel("Percent correct",fontsize=14)
 	ax2.set_xlabel("Outcome of last trial",fontsize=14)
-	ax2.set_ylabel("Mean belief strength",fontsize=14)
-	ax2.set_title("Outcome VS belief",fontsize=14)
+	ax2.set_ylabel("Mean uncertainty",fontsize=14)
+	ax2.set_title("Outcome VS uncertainty",fontsize=14)
 	tval,pval = stats.ttest_rel(rew_by_animal,unrew_by_animal)
-	ax2.text(1.5,0.15,"p={0:.4f}".format(pval))
+	ax2.text(0,2.1,"mean={0:.4f}".format(rew_by_animal.mean()))
+	ax2.text(1,3.4,"mean={0:.4f}".format(unrew_by_animal.mean()))
+	ax2.text(0.3,2.5,"pval={0:.4f}".format(pval))
+	ax2.text(0.3,2.7,"tval={0:.4f}".format(tval))
 	print("mean rewarded="+str(rew_by_animal.mean()))
 	print("mean last 4="+str(unrew_by_animal.mean()))
 	print("pval="+str(pval))
 	print("tval="+str(tval))
 	plt.tight_layout()
+
+def plot_sample_uncertainty_vs_outcomes(f_behavior):
+	trial_data = ptr.get_full_trials(f_behavior)
+	uncertainty = mf.uncertainty_from_trial_data(trial_data)
+	x_all = np.arange(uncertainty.shape[0])
+	x_rewarded = np.where(trial_data['outcome']=='rewarded_poke')[0][:-1]+1
+	y_rewarded = uncertainty[x_rewarded]
+	x_unrewarded = np.where(trial_data['outcome']=='unrewarded_poke')[0][:-1]+1
+	y_unrewarded = uncertainty[x_unrewarded]
+	fig,ax = plt.subplots(1)
+	ax.plot(x_all,uncertainty,color='k',linewidth=2,label='uncertainty')
+	ax.plot(x_rewarded,y_rewarded,color='g',marker='o',linestyle='none',
+		label='last rewarded')
+	ax.plot(x_unrewarded,y_unrewarded,color='r',marker='o',linestyle='none',
+		label='last unrewarded')
+	ax.set_xlabel("Trial number",fontsize=14)
+	ax.set_ylabel("Uncertainty estimate",fontsize=14)
+	ax.set_title("Example uncertainty estimation",fontsize=14)
+	ax.legend()
+	for ticklabel in ax.get_xticklabels():
+		ticklabel.set_fontsize(14)
+	for ticklabel in ax.get_yticklabels():
+		ticklabel.set_fontsize(14)
+
 
 
 
