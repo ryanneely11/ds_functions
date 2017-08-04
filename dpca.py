@@ -15,7 +15,8 @@ import model_fitting as mf
 condition_pairs = {
 	'context':['upper_rewarded','lower_rewarded'],
 	'action':['upper_lever','lower_lever'],
-	'outcome':['rewarded_poke','unrewarded_poke']
+	'outcome':['rewarded_poke','unrewarded_poke'],
+	'u_level':['low','med','high']
 }
 
 """
@@ -237,7 +238,7 @@ def run_dpca(X_trials,n_components,conditions):
 	join[labels[0]+labels[1]+'t'] = [labels[0]+labels[1],labels[0]+labels[1]+'t']
 	##initialize the dpca object
 	dpca = dPCA.dPCA(labels=labels,join=join,n_components=n_components,
-		regularizer='auto')
+		regularizer=None)
 	dpca.protect = ['t']
 	Z = dpca.fit_transform(np.nanmean(X_trials,axis=0),trialX=X_trials)
 	##Next, get the variance explained:
@@ -600,6 +601,9 @@ def get_dataset_mlab(f_behavior,f_ephys,conditions,smooth_method='both',smooth_w
 	X,trial_data = ptr.get_trial_spikes(f_behavior=f_behavior,f_ephys=f_ephys,smooth_method=smooth_method,
 		smooth_width=smooth_width,pad=pad,z_score=z_score,trial_duration=trial_duration,
 		max_duration=max_duration,min_rate=min_rate)
+	##if uncertainty level is one of the requested marginalizations, add this data to the trial_data set
+	if 'u_level' in conditions:
+		trial_data = mf.append_uncertainty(trial_data,condition_pairs['u_level'])
 	##get some metadata about this session
 	n_units = X.shape[1]
 	n_bins = X.shape[2]
@@ -628,6 +632,7 @@ def get_dataset_mlab(f_behavior,f_ephys,conditions,smooth_method='both',smooth_w
 			##record how many trials of this type we have
 			trialNum[:,c1_idx,c2_idx] = len(trial_index[t])
 	else:
+		print("One marginalization has no trials.")
 		X_c = None
 		trialNum = None
 	return X_c,trialNum

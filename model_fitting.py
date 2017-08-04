@@ -8,6 +8,7 @@ import HMM_model as hmm
 import RL_model as rl
 import file_lists
 import parse_trials as ptr
+from sklearn.cluster import KMeans
 
 """
 A function to fit RL and HMM models to behavior data from
@@ -169,6 +170,40 @@ def uncertainty_from_trial_data(trial_data):
 	##the first value is infinite, so replace/approximte it with the second
 	uncertainty[0] = uncertainty[1]
 	return uncertainty
+
+"""
+A function to append the uncertainty estimation to an existing trial_data
+dataset (computes the uncertainty from said trial data set). Includes both 
+raw uncertainty value, as well as a grouping index (high, medium, low) based
+on K-means clustering.
+"""
+def append_uncertainty(trial_data,levels=['low','med','high']):
+	##first, compute the uncertainty
+	uncertainty = uncertainty_from_trial_data(trial_data)
+	##now cluster the uncertainty into three groups
+	labels = KMeans(n_clusters=len(levels)).fit_predict(uncertainty.reshape(uncertainty.shape[0],1))
+	##now we need to figure out which groupings correspond to high-med-low
+	group_indices = []
+	group_means = []
+	for group_label in np.unique(labels):
+		idx = np.where(labels==group_label)[0]
+		group_indices.append(idx)
+		vals = uncertainty[idx]
+		group_means.append(vals.mean())
+	sorted_low_to_high = np.argsort(group_means)
+	##now we can do some work to add the data to the dataset.
+	trial_data['uncertainty'] = uncertainty
+	blank = np.empty(trial_data.shape[0])
+	trial_data['u_level'] = blank
+	for i,n in enumerate(sorted_low_to_high):
+		trial_data.loc[group_indices[n],'u_level'] = levels[i]
+	return trial_data
+
+
+
+	##next we want to know the ordering of the uncertainty levels in each of these groups
+
+
 
 
 """
