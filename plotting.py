@@ -1966,7 +1966,8 @@ Inputs:
 	Z: transformed spike matrix (output from dpca.session_dpca)
 	time: time axis (output from dpca.session_dpca)
 """
-def plot_dpca_results(Z,var_explained,sig_masks,conditions,bin_size,pad=None,n_components=3):	
+def plot_dpca_results(Z,var_explained,conditions,bin_size,sig_masks=None,pad=None,n_components=3,
+	linestyles=['solid','dashed'],colors=['yellow','orange','red']):	
 	##set up the figure
 	fig = plt.figure()
 	##add time and interaction as a conditions
@@ -1977,6 +1978,7 @@ def plot_dpca_results(Z,var_explained,sig_masks,conditions,bin_size,pad=None,n_c
 	time = np.linspace(0,bin_size*Z['t'].shape[-1],Z['t'].shape[-1])
 	##we'll plot the first n dPC's for each condition
 	axes = []
+	##make some assumptions about the order- binary outcomes will be second
 	for c in range(len(conditions)):
 		condition = conditions[c]
 		data = Z[c_idx[c]]
@@ -1984,25 +1986,29 @@ def plot_dpca_results(Z,var_explained,sig_masks,conditions,bin_size,pad=None,n_c
 			plotnum = (c*n_components+p)+1
 			ax = fig.add_subplot(n_conditions,n_components,plotnum)
 			##plot both kinds of trials for each condition
-			ax.plot(time,data[p,0,0,:],color='r',linewidth=2,
-				label=dpca.condition_pairs[conditions[1]][0]+",\n"+dpca.condition_pairs[conditions[2]][0])
-			ax.plot(time,data[p,0,1,:],color='r',linewidth=2,
-				label=dpca.condition_pairs[conditions[1]][0]+",\n"+dpca.condition_pairs[conditions[2]][1],
-				linestyle='dashed')
-			##now for the second condition
-			ax.plot(time,data[p,1,0,:],color='b',linewidth=2,
-				label=dpca.condition_pairs[conditions[1]][1]+",\n"+dpca.condition_pairs[conditions[2]][0])
-			ax.plot(time,data[p,1,1,:],color='b',linewidth=2,
-				label=dpca.condition_pairs[conditions[1]][1]+",\n"+dpca.condition_pairs[conditions[2]][1],
-			linestyle='dashed')
+			for i in range(data.shape[1]):
+				for j in range(data.shape[2]):
+					ax.plot(time,data[p,i,j,:],color=colors[i],linestyle=linestyles[j],linewidth=2,
+						label=dpca.condition_pairs[conditions[1]][i]+",\n"+dpca.condition_pairs[conditions[2]][j])
+
+			# ax.plot(time,data[p,0,1,:],color='r',linewidth=2,
+			# 	label=dpca.condition_pairs[conditions[1]][0]+",\n"+dpca.condition_pairs[conditions[2]][1],
+			# 	linestyle='dashed')
+			# ##now for the second condition
+			# ax.plot(time,data[p,1,0,:],color='b',linewidth=2,
+			# 	label=dpca.condition_pairs[conditions[1]][1]+",\n"+dpca.condition_pairs[conditions[2]][0])
+			# ax.plot(time,data[p,1,1,:],color='b',linewidth=2,
+			# 	label=dpca.condition_pairs[conditions[1]][1]+",\n"+dpca.condition_pairs[conditions[2]][1],
+			# linestyle='dashed')
 			##now get the significance masks (unless there isn't one, like for time)
-			try:
-				mask = sig_masks[c_idx[c]][p]
-				sigx = np.where(mask==True)[0]
-				sigy = np.ones(sigx.size)*ax.get_ylim()[0]
-				ax.plot(sigx,sigy,color='k',linewidth=2)
-			except KeyError:
-				pass
+			if sig_masks is not None:
+				try:
+					mask = sig_masks[c_idx[c]][p]
+					sigx = np.where(mask==True)[0]
+					sigy = np.ones(sigx.size)*ax.get_ylim()[0]
+					ax.plot(sigx,sigy,color='k',linewidth=2)
+				except KeyError:
+					pass
 			##now plot the lines corresponding to the events, if requested
 			if pad is not None:
 				plt.vlines(np.array([pad[0],time.max()-pad[1]]),ax.get_ylim()[0],ax.get_ylim()[1],

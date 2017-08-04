@@ -10,6 +10,7 @@ from scipy import interpolate
 from scipy.stats import zscore
 import parse_trials as ptr
 import model_fitting as mf
+from itertools import chain, combinations
 
 ###TODO: get datasets for everything, combined
 condition_pairs = {
@@ -227,26 +228,31 @@ Inputs:
 	n_components: the number of components to fit
 	conditions: list of conditions used to generate the dataset
 """
-def run_dpca(X_trials,n_components,conditions):
+def run_dpca(X_trials,n_components,conditions,get_sig=True,optimize='auto'):
 	##create labels from the first letter of the conditions
 	##***this might not work if the implementation changes***
-	labels = conditions[0][0]+conditions[1][0]+'t'
+	labels = ''
+	for c in range(len(conditions)):
+		labels+=conditions[c][0]
+	labels+='t'
 	#create a dictionary argument that joins the time- and condition-dependent components
-	join = {}
-	for l in labels[:-1]:
-		join[l+'t'] = [l,l+'t']
-	join[labels[0]+labels[1]+'t'] = [labels[0]+labels[1],labels[0]+labels[1]+'t']
+	join = join_labels(labels)
 	##initialize the dpca object
 	dpca = dPCA.dPCA(labels=labels,join=join,n_components=n_components,
-		regularizer=None)
+		regularizer=optimize)
 	dpca.protect = ['t']
 	Z = dpca.fit_transform(np.nanmean(X_trials,axis=0),trialX=X_trials)
 	##Next, get the variance explained:
 	var_explained = dpca.explained_variance_ratio_
-	##finally, get the significance masks (places where the demixed components are significant)
-	sig_masks = dpca.significance_analysis(np.nanmean(X_trials,axis=0),X_trials,axis='t',
-		n_shuffles=25,n_splits=3,n_consecutive=1)
+	#finally, get the significance masks (places where the demixed components are significant)
+	if get_sig:
+		sig_masks = dpca.significance_analysis(np.nanmean(X_trials,axis=0),X_trials,axis='t',
+			n_shuffles=25,n_splits=3,n_consecutive=1)
+	else:
+		sig_masks = None
 	return Z,var_explained,sig_masks
+
+
 
 """
 A function to fit dpca using one dataset, and then use that
@@ -265,10 +271,7 @@ def fit_dpca_two(X_trials1,X_trials2,n_components,conditions):
 	##***this might not work if the implementation changes***
 	labels = conditions[0][0]+conditions[1][0]+'t'
 	#create a dictionary argument that joins the time- and condition-dependent components
-	join = {}
-	for l in labels[:-1]:
-		join[l+'t'] = [l,l+'t']
-	join[labels[0]+labels[1]+'t'] = [labels[0]+labels[1],labels[0]+labels[1]+'t']
+	join = join_labels(labels)
 	##initialize the dpca object
 	dpca = dPCA.dPCA(labels=labels,join=join,n_components=n_components,
 		regularizer='auto')
@@ -684,3 +687,17 @@ def split_trials(trial_data,conditions):
 	else:
 		n_trials = 0
 	return trial_index,n_trials
+
+"""
+A helper function to join labels with time axes
+"""
+def join_labels(labels):
+	##assume the last index is 't' (time)
+	s = list(labels[:-1])
+	perms = chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
+	perms = list(map(''.join,perms))[1:]
+	join = {}
+	for l in perms:
+		join[l+'t'] = [l,l+'t']
+	return join
+
