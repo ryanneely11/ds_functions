@@ -588,24 +588,22 @@ Inputs:
 	f_ephys: file path to ephys data
 
 """
-def tensors_v_belief(f_behavior,f_ephys,smooth_method='both',smooth_width=[80,40],
+def tensors_v_uncertainty(f_behavior,f_ephys,smooth_method='both',smooth_width=[80,40],
 	pad=[1200,1200],trial_duration=None,min_rate=0,max_duration=3000,
 	n_components=4,epoch='outcome',verbose=True):
 	##start by computing the tensors
 	model,info,trial_data = ta.run_tensor(f_behavior,f_ephys,smooth_method=smooth_method,
 		smooth_width=smooth_width,pad=pad,z_score=True,trial_duration=trial_duration,
 		min_rate=min_rate,max_duration=max_duration,n_components=n_components,epoch=epoch)
-	##now compute the HMM
-	hmm = mf.fit_models_from_trial_data(trial_data)
-	##now compute the belief strength
-	belief = np.abs(hmm['state_vals'][0]-hmm['state_vals'][1])
+	##now compute the uncertainty trial-to-trial
+	uncertainty = mf.uncertainty_from_trial_data(trial_data)
 	##finally compute the strongest correlation for the trial factors
 	trial_factors = model[2]
 	ccs = np.zeros(n_components)
 	pvals = np.zeros(n_components)
 	for i in range(n_components):
-		ccs[i],pvals[i] = pearsonr(belief,trial_factors[:,i])
-	##find the trial factor with the most significant correlation to belief
+		ccs[i],pvals[i] = pearsonr(uncertainty,trial_factors[:,i])
+	##find the trial factor with the most significant correlation to uncertainty
 	best_idx = np.argmin(pvals)
 	cc = ccs[best_idx]
 	pval = pvals[best_idx]
@@ -614,10 +612,10 @@ def tensors_v_belief(f_behavior,f_ephys,smooth_method='both',smooth_width=[80,40
 		print(f_behavior[-11:-5])
 		print("CC = {}".format(cc))
 		print("P = {}".format(pval))
-	return cc,pval,trial_factor,belief
+	return cc,pval,trial_factor,uncertainty
 
 """multiprocessing impementation"""
-def mp_tensors_v_belief(args):
+def mp_tensors_v_uncertainty(args):
 	##parse args
 	f_behavior = args[0]
 	f_ephys = args[1]
@@ -629,14 +627,14 @@ def mp_tensors_v_belief(args):
 	max_duration = args[7]
 	n_components = args[8]
 	epoch = args[9]
-	cc,pval,trial_factor,belief = tensors_v_belief(f_behavior,f_ephys,
+	cc,pval,trial_factor,uncertainty = tensors_v_uncertainty(f_behavior,f_ephys,
 		smooth_method=smooth_method,smooth_width=smooth_width,pad=pad,
 		trial_duration=trial_duration,min_rate=min_rate,
 		max_duration=max_duration,n_components=n_components,epoch=epoch,verbose=False)
 	print(f_behavior[-11:-5])
 	print("CC = {}".format(cc))
 	print("P = {}".format(pval))
-	return cc,pval,trial_factor,belief
+	return cc,pval,trial_factor,uncertainty
 
 """
 This function is designed to "standardize" a given trial. The rationale is that

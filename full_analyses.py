@@ -43,9 +43,9 @@ Returns:
 	belief: belief estimation from HMM
 	trial_factor: the trial factor that best captures the belief state
 """
-def tensors_v_belief(smooth_method='both',smooth_width=[80,40],pad=[1200,1200],
+def tensors_v_uncertainty(smooth_method='both',smooth_width=[80,40],pad=[1200,1200],
 	trial_duration=None,min_rate=0,max_duration=3000,n_components=4,epoch='outcome'):
-	datafile = "/Volumes/Untitled/Ryan/DS_animals/results/tensor_analysis/1200ms_post_4factors.hdf5"
+	datafile = r"D:\Ryan\DS_animals\results\tensor_analysis\1200ms_post_4factors.hdf5"
 	f_out = h5py.File(datafile,'a')
 	f_out.close()
 	##create an argument list
@@ -55,12 +55,12 @@ def tensors_v_belief(smooth_method='both',smooth_width=[80,40],pad=[1200,1200],
 	for args in arglist:
 		f_out = h5py.File(datafile,'a')
 		try:
-			cc,pval,trial_factor,belief = sa.mp_tensors_v_belief(args)
+			cc,pval,trial_factor,uncertainty = sa.mp_tensors_v_uncertainty(args)
 			group = f_out.create_group(args[0][-11:-5])
 			group.create_dataset('cc',data=np.array([cc]))
 			group.create_dataset("pval",data=np.array([pval]))
 			group.create_dataset("trial_factor",data=trial_factor)
-			group.create_dataset("belief",data=belief)
+			group.create_dataset("uncertainty",data=uncertainty)
 		except:
 			print("Can't decompose {}".format(args[0][-11:-5]))
 		f_out.close()

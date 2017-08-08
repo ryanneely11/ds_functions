@@ -166,9 +166,9 @@ def plot_linear_regression(results,window=[1000,1000],bin_width=50):
 
 
 """
-Plots tensors vs belief
+Plots tensors vs uncertainty
 """
-def plot_tensors_v_belief(datafile):
+def plot_tensors_v_uncertainty(datafile):
 	f = h5py.File(datafile,'r')
 	##Let's look at these data by animal
 	animals = file_lists.animals
@@ -178,19 +178,19 @@ def plot_tensors_v_belief(datafile):
 	n_sig = []
 	n_totals = []
 	n_sig_shuff = []
-	best_beliefs = []
+	best_uncertainties = []
 	best_tfs = []
 	for animal in animals:
 		sessions = [x for x in list(f) if x.startswith(animal)]
 		n_sessions = len(sessions)
 		pvals = []
 		ccs = []
-		beliefs = []
+		uncertainties = []
 		trial_factors = []
 		for session in sessions:
 			pvals.append(np.asarray(f[session]['pval']))
 			ccs.append(np.asarray(f[session]['cc']))
-			beliefs.append(np.asarray(f[session]['belief']))
+			uncertainties.append(np.asarray(f[session]['uncertainty']))
 			trial_factors.append(np.asarray(f[session]['trial_factor']))
 		pvals = np.asarray(pvals).squeeze()
 		ccs = np.abs(np.asarray(ccs).squeeze())
@@ -198,17 +198,17 @@ def plot_tensors_v_belief(datafile):
 		##shuffled comparisons
 		pvals_shuff = np.zeros(n_sessions)
 		ccs_shuff = np.zeros(n_sessions)
-		belief_idx = np.random.permutation(np.arange(n_sessions))
+		uncertainty_idx = np.random.permutation(np.arange(n_sessions))
 		for i in range(n_sessions):
-			idx = belief_idx[i]
-			belief = beliefs[idx]
+			idx = uncertainty_idx[i]
+			uncertainty = uncertainties[idx]
 			trial_factor = trial_factors[i]
 			##equalize the lengths
-			min_trials = np.min([belief.size,trial_factor.size])
-			belief = belief[0:min_trials]
+			min_trials = np.min([uncertainty.size,trial_factor.size])
+			uncertainty = uncertainty[0:min_trials]
 			trial_factor = trial_factor[0:min_trials]
 			##now do the stats
-			ccs_shuff[i],pvals_shuff[i] = pearsonr(belief,trial_factor)
+			ccs_shuff[i],pvals_shuff[i] = pearsonr(uncertainty,trial_factor)
 		##now do the comparisons
 		n_totals.append(n_sessions)
 		n_sig.append(np.where(pvals<=0.05)[0].size)
@@ -216,7 +216,7 @@ def plot_tensors_v_belief(datafile):
 		mean_ccs.append(ccs.mean())
 		mean_ccs_shuff.append(np.abs(ccs_shuff).mean())
 		best_idx = np.argmax(ccs)
-		best_beliefs.append(beliefs[best_idx])
+		best_uncertainties.append(uncertainties[best_idx])
 		best_tfs.append(trial_factors[best_idx])
 	f.close()
 	mean_ccs = np.asarray(mean_ccs)
@@ -249,7 +249,7 @@ def plot_tensors_v_belief(datafile):
 		ticklabel.set_fontsize(14)
 	# ax.set_xlim(-0.3,1.3)
 	# ax.set_ylim(0,12)
-	ax.set_title("Correlation of belief and trial factors",fontsize=14)
+	ax.set_title("Correlation of uncertainty and trial factors",fontsize=14)
 	print("pval = "+str(pval))
 	print("tval = "+str(tval))
 	print("mean p sig = "+str(means[1]))
@@ -279,19 +279,19 @@ def plot_tensors_v_belief(datafile):
 		ticklabel.set_fontsize(14)
 	# ax.set_xlim(-0.3,1.3)
 	# ax.set_ylim(0,12)
-	ax.set_title("Correlation of belief and trial factors",fontsize=14)
+	ax.set_title("Correlation of uncertainty and trial factors",fontsize=14)
 	print("pval = "+str(pval))
 	print("tval = "+str(tval))
 	print("mean p sig = "+str(means[1]))
 	print("mean shuffled = "+str(means[0]))
 	##finally plot an example of good correlation
 	fig,ax = plt.subplots(1)
-	ax.plot(zscore(best_beliefs[1]),color='k',linewidth=2,linestyle='dashed',label='belief')
+	ax.plot(zscore(best_uncertainties[1]),color='k',linewidth=2,linestyle='dashed',label='uncertainty')
 	ax.plot(-zscore(best_tfs[1]),color='r',linewidth=2,label='trial factor')
 	ax.set_xlabel("Trials",fontsize=14)
 	ax.set_ylabel("Normalized value",fontsize=14)
 	ax.set_title("Example session",fontsize=14)
-	cc,pval = pearsonr(best_beliefs[1],-best_tfs[1])
+	cc,pval = pearsonr(best_uncertainties[1],-best_tfs[1])
 	ax.text(5,-2,"CC={}".format(cc))
 	ax.text(5,-2.5,"P={}".format(pval))
 	ax.legend()
