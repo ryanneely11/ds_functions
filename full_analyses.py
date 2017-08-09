@@ -207,10 +207,10 @@ Inputs:
 def decision_vars(pad=[1200,120],smooth_method='both',smooth_width=[100,40],
 	max_duration=4000,min_rate=0.1,z_score=True,trial_duration=None,state_thresh=0.1):
 	odds = []
-	trial_data = []
+	trial_data = pd.DataFrame()
 	for animal in file_lists.animals:
-		behavior_files= file_lists.split_behavior_by_animal(match_ephys=True)[animal_id] ##first 6 days have only one lever
-		ephys_files = file_lists.split_ephys_by_animal()[animal_id]
+		behavior_files= file_lists.split_behavior_by_animal(match_ephys=True)[animal] ##first 6 days have only one lever
+		ephys_files = file_lists.split_ephys_by_animal()[animal]
 		##make sure everything matches
 		b_days = [x[-8:-5] for x in behavior_files]
 		e_days = [x[-9:-6] for x in ephys_files]
@@ -238,14 +238,10 @@ def decision_vars(pad=[1200,120],smooth_method='both',smooth_width=[100,40],
 			trial_data = trial_data.append(td)
 	trial_data = trial_data.reset_index()
 	odds = np.concatenate(odds,axis=0)
-	##now, use the trial data to get HMM estimates of the hidden state
-	model_data = mf.fit_models_from_trial_data(trial_data)
-	##get the data about the HMM
-	state_vars = model_data['state_vals']
-	##now find the trial indices of the weak and strong trials
-	belief = np.abs(state_vars[0]-state_vars[1]) ##diff between upper and lower belief strength
-	sort_idx = np.argsort(belief) ##trial indices sorted from weak to strong belief states
-	n_split = np.ceil(state_thresh*belief.size).astype(int) ##number of trials to take for each case
+	##now, use the trial data to get HMM estimates of uncertainty
+	uncertainty = mf.uncertainty_from_trial_data(trial_data)
+	sort_idx = np.argsort(uncertainty) ##trial indices sorted from weak to strong belief states
+	n_split = np.ceil(state_thresh*uncertainty.size).astype(int) ##number of trials to take for each case
 	weak_idx = sort_idx[:n_split] ##the first n_split weakest trials
 	strong_idx = sort_idx[-n_split:] ##the last n_split strongest trials
 	##now get the upper and lower lever trial info

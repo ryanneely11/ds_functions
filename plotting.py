@@ -1476,31 +1476,11 @@ Inputs:
 	-state_thresh: percentage for state estimation to split trials into weak or strong belief
 		states. 0.1 = top 10% of weak or strong trials are put into this catagory
 """
-def plot_decision_vars(pad=[2000,120],smooth_method='both',smooth_width=[100,40],
-	max_duration=4000,min_rate=0.1,z_score=True,trial_duration=None,state_thresh=0.1):
-	results = {}
-	upper_odds = []
-	lower_odds = []
-	upper_strong_odds = []
-	lower_strong_odds = []
-	upper_weak_odds = []
-	lower_weak_odds = []
-	for animal in file_lists.animals:
-		data = fa.decision_vars2(pad=pad,smooth_method=smooth_method,smooth_width=smooth_width,
+def plot_decision_vars(pad=[2000,120],smooth_method='both',smooth_width=[100,50],
+	max_duration=4000,min_rate=0.1,z_score=True,trial_duration=None,state_thresh=0.05):
+	results = fa.decision_vars(pad=pad,smooth_method=smooth_method,smooth_width=smooth_width,
 			max_duration=max_duration,min_rate=min_rate,z_score=z_score,trial_duration=trial_duration,
 			state_thresh=state_thresh)
-		upper_odds.append(data['upper_odds'])
-		lower_odds.append(data['lower_odds'])
-		upper_strong_odds.append(data['upper_strong_odds'])
-		lower_strong_odds.append(data['lower_strong_odds'])
-		upper_weak_odds.append(data['upper_weak_odds'])
-		lower_weak_odds.append(data['lower_weak_odds'])
-	results['upper_odds'] = np.concatenate(upper_odds,axis=0)
-	results['upper_strong_odds'] = np.concatenate(upper_strong_odds,axis=0)
-	results['upper_weak_odds'] = np.concatenate(upper_weak_odds,axis=0)
-	results['lower_odds'] = np.concatenate(lower_odds,axis=0)
-	results['lower_strong_odds'] = np.concatenate(lower_strong_odds,axis=0)
-	results['lower_weak_odds'] = np.concatenate(lower_weak_odds,axis=0)
 	##create a figure
 	fig,ax = plt.subplots(1)
 	fig2,ax2 = plt.subplots(1)
@@ -1517,8 +1497,8 @@ def plot_decision_vars(pad=[2000,120],smooth_method='both',smooth_width=[100,40]
 	upper_sem = stats.sem(results['upper_odds'],axis=0)
 	upper_strong_mean = results['upper_strong_odds'].mean(axis=0)
 	upper_strong_sem = stats.sem(results['upper_strong_odds'],axis=0)
-	upper_weak_mean = (results['upper_weak_odds']-0.8).mean(axis=0)
-	upper_weak_sem = stats.sem(results['upper_weak_odds']-0.8,axis=0)
+	upper_weak_mean = (results['upper_weak_odds']).mean(axis=0)
+	upper_weak_sem = stats.sem(results['upper_weak_odds'],axis=0)
 	##now plot
 	x = np.linspace(-pad[0]/1000,0,lower_mean.shape[0])
 	ax2.plot(x,lower_mean,color='b',linewidth=2,linestyle='--',label='all lower')
