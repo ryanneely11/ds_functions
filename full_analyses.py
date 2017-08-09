@@ -45,7 +45,7 @@ Returns:
 """
 def tensors_v_uncertainty(smooth_method='both',smooth_width=[80,40],pad=[1200,1200],
 	trial_duration=None,min_rate=0,max_duration=3000,n_components=4,epoch='outcome'):
-	datafile = r"D:\Ryan\DS_animals\results\tensor_analysis\1200ms_post_4factors.hdf5"
+	datafile = "/Volumes/Untitled/Ryan/DS_animals/results/tensor_analysis/1200ms_post_4factors.hdf5"
 	f_out = h5py.File(datafile,'a')
 	f_out.close()
 	##create an argument list

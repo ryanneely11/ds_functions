@@ -286,14 +286,14 @@ def plot_tensors_v_uncertainty(datafile):
 	print("mean shuffled = "+str(means[0]))
 	##finally plot an example of good correlation
 	fig,ax = plt.subplots(1)
-	ax.plot(zscore(best_uncertainties[1]),color='k',linewidth=2,linestyle='dashed',label='uncertainty')
-	ax.plot(-zscore(best_tfs[1]),color='r',linewidth=2,label='trial factor')
+	ax.plot(zscore(best_uncertainties[0]),color='k',linewidth=2,linestyle='dashed',label='uncertainty')
+	ax.plot(-zscore(best_tfs[0]),color='r',linewidth=2,label='trial factor')
 	ax.set_xlabel("Trials",fontsize=14)
 	ax.set_ylabel("Normalized value",fontsize=14)
 	ax.set_title("Example session",fontsize=14)
 	cc,pval = pearsonr(best_uncertainties[1],-best_tfs[1])
-	ax.text(5,-2,"CC={}".format(cc))
-	ax.text(5,-2.5,"P={}".format(pval))
+	ax.text(5,3,"CC={}".format(cc))
+	ax.text(5,2.5,"P={}".format(pval))
 	ax.legend()
 
 
